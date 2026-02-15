@@ -1,6 +1,6 @@
-import type { EncounterMap, GameState } from '../types/doc-db'
-import type { ActionDescriptor } from '../types/actions'
-import { isEncounterMode } from '../domain/invariants'
+import type { EncounterMap, GameState } from '../types/game.js'
+import type { ActionDescriptor } from '../types/actions.js'
+import { isEncounterMode } from '../domain/invariants.js'
 
 function hasInitiative(state: GameState): boolean {
   return !!state.encounter && state.encounter.initiative.length > 0

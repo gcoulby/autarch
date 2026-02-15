@@ -1,4 +1,4 @@
-import { GameState } from '../types/doc-db'
+import { GameState } from '../types/game.js'
 
 export function createInitialState(gameId: string, schemaVersion: number, createdAt: string): GameState {
   return {

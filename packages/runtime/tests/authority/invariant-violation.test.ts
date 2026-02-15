@@ -1,9 +1,9 @@
 // tests/invariant-violation.test.ts
 
 import { describe, it, expect } from 'vitest'
-import { Orchestrator } from '../../src/engine/orchestrator'
-import { InvariantError } from '../../src/domain/invariants'
-import type { GameEvent, GameState } from '../../src/types/doc-db'
+import { Orchestrator } from '../../src/orchestrator'
+import { InvariantError } from '@autarch/engine'
+import type { GameEvent, GameState } from '@autarch/engine'
 
 class InMemoryEventStore {
   private events: GameEvent[] = []

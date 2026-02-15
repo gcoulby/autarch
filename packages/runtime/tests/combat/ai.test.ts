@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { Orchestrator } from '../../src/engine/orchestrator'
-import { runAiTurn } from '../../src/engine/ai/basic-ai'
+import { Orchestrator } from '../../src/orchestrator'
+import { runAiTurn } from '@autarch/engine'
 import { InMemoryEventStore, InMemoryStateStore, setupEncounter } from '../helpers'
 
 describe('M2 AI (zones)', () => {

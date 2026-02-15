@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { Orchestrator } from '../../src/engine/orchestrator'
+import { Orchestrator } from '../../src/orchestrator'
 import { InMemoryEventStore, InMemoryStateStore, makeEntity } from '../helpers'
-import { getValidActions } from '../../src/engine/valid-actions'
+import { getValidActions } from '@autarch/engine'
 
 describe('M2 replay includes encounter map', () => {
   it('replay reconstructs map so Move actions exist', async () => {

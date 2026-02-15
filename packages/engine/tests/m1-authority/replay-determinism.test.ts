@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { replay } from '../../src/domain/replay'
-import type { GameEvent, Entity } from '../../src/types/doc-db'
+import type { GameEvent, Entity } from '../../src/types/game'
 
 function makeEntity(id: string, kind: Entity['kind'], name: string): Entity {
   return {

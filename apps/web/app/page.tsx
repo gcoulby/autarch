@@ -2,7 +2,7 @@ import Image, { type ImageProps } from 'next/image'
 import { Button } from '@repo/ui/button'
 import styles from './page.module.css'
 
-import { Orchestrator } from '@autarch/engine'
+import { Orchestrator } from '@autarch/runtime'
 import type { Entity, GameState, GameEvent } from '@autarch/engine'
 
 type Props = Omit<ImageProps, 'src'> & {

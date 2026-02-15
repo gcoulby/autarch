@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { runAiTurn } from '../../src/engine/ai/basic-ai' // adjust path
-import { Orchestrator } from '../../src/engine/orchestrator'
+import { runAiTurn } from '@autarch/engine' // adjust path
+import { Orchestrator } from '../../src/orchestrator'
 import { InMemoryEventStore, InMemoryStateStore, makeEntity, setupEncounter } from '../helpers'
 
 // reuse your InMemoryEventStore/StateStore + setupEncounter helper

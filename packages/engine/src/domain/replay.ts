@@ -1,6 +1,6 @@
-import type { GameEvent, GameState } from '../types/doc-db'
-import { applyEvent } from './reducer'
-import { createInitialState } from '../engine/state'
+import type { GameEvent, GameState } from '../types/game.js'
+import { applyEvent } from './reducer.js'
+import { createInitialState } from '../engine/state.js'
 
 export function replay(gameId: string, events: GameEvent[]): GameState {
   const created = events.find((e) => e.type === 'GameCreated')

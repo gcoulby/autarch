@@ -1,4 +1,4 @@
-import { Entity, GameEvent } from './doc-db'
+import { Entity, GameEvent } from './game.js'
 
 export type GameMode = 'scene' | 'encounter' | 'downtime'
 export type GamePhase = 'setup' | 'initiative' | 'turn' | 'resolution'

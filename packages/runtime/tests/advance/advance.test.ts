@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Orchestrator } from '../../src/engine/orchestrator'
+import { Orchestrator } from '../../src/orchestrator'
 import { InMemoryEventStore, InMemoryStateStore, setupEncounter } from '../helpers'
 
 describe('M3 Advance (pure system driver)', () => {

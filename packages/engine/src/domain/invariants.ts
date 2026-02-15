@@ -1,4 +1,4 @@
-import type { GameState } from '../types/doc-db'
+import type { GameState } from '../types/game.js'
 
 export class InvariantError extends Error {
   constructor(message: string) {

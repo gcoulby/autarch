@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { Orchestrator } from '../../src/engine/orchestrator'
-import type { GameEvent, GameState, Entity } from '../../src/types/doc-db'
+import { Orchestrator } from '../../src/orchestrator'
+import type { GameEvent, GameState, Entity } from '@autarch/engine'
 
 class InMemoryEventStore {
   private events: GameEvent[] = []

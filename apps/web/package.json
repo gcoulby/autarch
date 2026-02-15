@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@autarch/engine": "workspace:*",
+    "@autarch/runtime": "workspace:*",
+    "@autarch/persistence": "workspace:*",
     "@repo/ui": "workspace:*",
     "next": "16.1.5",
     "react": "^19.2.0",

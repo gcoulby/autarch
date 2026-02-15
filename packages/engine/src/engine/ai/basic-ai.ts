@@ -1,7 +1,7 @@
-import type { GameState } from '../../types/doc-db'
-import type { ActionDescriptor, CommandDescriptor } from '../../types/actions'
-import { getValidActions } from '../valid-actions'
-import { assert } from '../../domain/invariants'
+import type { GameState } from '../../types/game.js'
+import type { ActionDescriptor, CommandDescriptor } from '../../types/actions.js'
+import { getValidActions } from '../valid-actions.js'
+import { assert } from '../../domain/invariants.js'
 
 export interface AiOrchestrator {
   loadState(gameId: string): Promise<GameState | null>

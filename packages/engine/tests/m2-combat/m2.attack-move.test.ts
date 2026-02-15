@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { getValidActions } from '../../src/engine/valid-actions'
-import type { GameState, Entity } from '../../src/types/doc-db'
+import type { GameState, Entity } from '../../src/types/game'
 
 function makeEntity(id: string, kind: Entity['kind'], name: string, zoneId: string): Entity {
   return {

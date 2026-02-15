@@ -1,10 +1,10 @@
-import type { GameEvent, GameState, Entity, EncounterMap } from '../types/doc-db'
-import { assert, requireEntity, isEncounterMode } from '../domain/invariants'
-import { replay } from '../domain/replay'
-import type { EventStore, StateStore } from '../storage/stores'
-import { runAiTurn } from './ai/basic-ai'
+import type { EncounterMap, Entity, GameEvent, GameState } from '@autarch/engine'
+import { assert, isEncounterMode, requireEntity } from '@autarch/engine'
+import { replay } from '@autarch/engine'
+import type { EventStore, StateStore } from '@autarch/persistence'
+import { runAiTurn } from '@autarch/engine'
 
-function getZoneId(state: any, entityId: string): string | null {
+function getZoneId(state: GameState, entityId: string): string | null {
   return state.entities?.[entityId]?.position?.zoneId ?? null
 }
 
@@ -14,20 +14,20 @@ function areOpponents(aKind: string, bKind: string): boolean {
   return aIsEnemy !== bIsEnemy
 }
 
-function getZone(state: any, zoneId: string) {
+function getZone(state: GameState, zoneId: string) {
   return state.encounter?.map?.zones?.[zoneId]
 }
 
-function isAlive(e: any): boolean {
+function isAlive(e: Entity | undefined): boolean {
   return !!e?.status?.alive
 }
 
-function isPc(e: any): boolean {
-  return e?.kind === 'pc'
+function isPc(e: Entity): boolean {
+  return e.kind === 'pc'
 }
 
-function isEnemy(e: any): boolean {
-  return e?.kind === 'enemy'
+function isEnemy(e: Entity): boolean {
+  return e.kind === 'enemy'
 }
 
 function getEncounterResult(state: GameState): 'win' | 'loss' | null {
@@ -92,6 +92,7 @@ export class Orchestrator {
       payload,
     }
   }
+
   async dispatch(gameId: string, cmd: Command, actorId?: string): Promise<GameState> {
     const current = await this.loadState(gameId)
     const lastSeq = await this.eventStore.getLastSeq(gameId)
@@ -168,7 +169,6 @@ export class Orchestrator {
           const targetZoneId = getZoneId(state, cmd.targetId)
           assert(attackerZoneId && targetZoneId, 'Attacker/target missing position.zoneId')
 
-          // M2: melee-only for now
           assert(attackerZoneId === targetZoneId, 'Target not in range (must be same zone)')
 
           eventsToAppend.push(
@@ -190,17 +190,14 @@ export class Orchestrator {
         case 'Advance': {
           assert(isEncounterMode(state), 'Advance only valid in encounter mode')
 
-          // Once resolved, do nothing.
           if (state.runtime.phase === 'resolution') return state
 
-          // Termination can be checked from any encounter phase.
           const result = getEncounterResult(state)
           if (result) {
             eventsToAppend.push(this.makeEvent(gameId, nextSeq(), 'EncounterEnded', { result }, actorId))
             break
           }
 
-          // If we are still in initiative, Advance moves us into turn phase.
           if (state.runtime.phase === 'initiative') {
             assert(state.encounter, 'Advance requires encounter state')
             assert(state.encounter.initiative.length > 0, 'Advance in initiative requires initiative to be set')
@@ -208,22 +205,16 @@ export class Orchestrator {
             break
           }
 
-          // For now we support advancing only in turn phase beyond this point.
           assert(state.runtime.phase === 'turn', 'Advance only supported in initiative/turn/resolution for now')
 
-          // No active entity means "start next turn"
           if (!state.runtime.activeEntityId) {
             return await this.dispatch(gameId, { type: 'StartTurn' }, actorId)
           }
 
-          // AI turn means "run AI"
           if (state.runtime.activeSide === 'ai') {
-            // const { runAiTurn } = await import('./ai/basic-ai')
-            // return await runAiTurn(this as any, gameId)
             return await runAiTurn(this, gameId)
           }
 
-          // Player turn: do nothing
           return state
         }
 
@@ -292,7 +283,6 @@ export class Orchestrator {
 
           if (state.encounter) {
             const nextIndex = (state.encounter.initiativeIndex + 1) % state.encounter.initiative.length
-
             eventsToAppend.push(this.makeEvent(gameId, nextSeq(), 'EncounterPointerSet', { initiativeIndex: nextIndex }, actorId))
           }
 

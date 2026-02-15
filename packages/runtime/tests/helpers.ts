@@ -1,5 +1,5 @@
-import { Entity, GameEvent, GameState } from '../src/types/doc-db'
-import { Orchestrator } from '../src/engine/orchestrator'
+import { Entity, GameEvent, GameState } from '@autarch/engine'
+import { Orchestrator } from '../src/orchestrator'
 
 export class InMemoryEventStore {
   private events: GameEvent[] = []

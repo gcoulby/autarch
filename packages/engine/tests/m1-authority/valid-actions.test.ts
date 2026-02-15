@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Entity, GameState } from '../../src/types/doc-db'
+import type { Entity, GameState } from '../../src/types/game'
 import type { ActionDescriptor } from '../../src/types/actions'
 import { getValidActions } from '../../src/engine/valid-actions'
 

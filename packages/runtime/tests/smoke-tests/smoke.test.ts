@@ -8,8 +8,8 @@
 import { describe, it, expect } from 'vitest'
 
 // Adjust these import paths to match your project
-import { Orchestrator } from '../../src/engine/orchestrator'
-import type { Entity, GameState, GameEvent } from '../../src/types/doc-db'
+import { Orchestrator } from '../../src/orchestrator'
+import type { Entity, GameState, GameEvent } from '@autarch/engine'
 
 class InMemoryEventStore {
   private events: GameEvent[] = []

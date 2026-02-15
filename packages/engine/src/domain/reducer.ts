@@ -1,5 +1,5 @@
-import type { GameEvent, GameState } from '../types/doc-db'
-import { assert, requireEntity } from './invariants'
+import type { GameEvent, GameState } from '../types/game.js'
+import { assert, requireEntity } from './invariants.js'
 
 export function applyEvent(state: GameState, ev: GameEvent): GameState {
   const next: GameState = structuredClone(state)
