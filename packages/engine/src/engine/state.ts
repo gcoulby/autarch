@@ -1,0 +1,26 @@
+import { GameState } from '../types/doc-db'
+
+export function createInitialState(gameId: string, schemaVersion: number, createdAt: string): GameState {
+  return {
+    _id: gameId,
+    schemaVersion,
+    meta: { createdAt },
+    runtime: {
+      mode: 'scene',
+      phase: 'setup',
+      activeSide: 'system',
+      activeEntityId: null,
+      round: 0,
+      tick: 0,
+      chaos: 5,
+    },
+    world: {
+      sceneId: null,
+      locationId: null,
+    },
+    entities: {},
+    encounter: undefined,
+    flags: { locks: [] },
+    lastEventSeq: 0,
+  }
+}
