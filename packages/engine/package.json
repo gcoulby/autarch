@@ -27,7 +27,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.12.1",
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@autarch/typescript-config": "workspace:*",
     "@types/node": "^25.1.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

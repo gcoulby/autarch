@@ -26,7 +26,7 @@
     "@autarch/persistence": "workspace:*"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@autarch/typescript-config": "workspace:*",
     "@types/node": "^25.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

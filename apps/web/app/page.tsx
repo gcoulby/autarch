@@ -1,78 +1,169 @@
-import Image, { type ImageProps } from 'next/image'
-import { Button } from '@repo/ui/button'
+'use client'
+
+import { useMemo, useState } from 'react'
+import { Button } from '@autarch/ui/components/ui/button'
 import styles from './page.module.css'
 
 import { Orchestrator } from '@autarch/runtime'
-import type { Entity, GameState, GameEvent } from '@autarch/engine'
+import { EventStore } from '@autarch/persistence'
+import type { Entity, GameEvent, GameState, EncounterMap } from '@autarch/engine'
+import { Card, CardContent, CardHeader } from '@autarch/ui/components/ui/card'
 
-type Props = Omit<ImageProps, 'src'> & {
-  srcLight: string
-  srcDark: string
+function pretty(x: unknown) {
+  return JSON.stringify(x, null, 2)
 }
 
-const ThemeImage = (props: Props) => {
-  const { srcLight, srcDark, ...rest } = props
+function makeDemoMap(): EncounterMap {
+  return {
+    zones: {
+      a: { id: 'a', name: 'Zone A', adjacent: ['b'] },
+      b: { id: 'b', name: 'Zone B', adjacent: ['a'] },
+    },
+  } as any
+}
 
-  return (
-    <>
-      <Image {...rest} src={srcLight} className="imgLight" />
-      <Image {...rest} src={srcDark} className="imgDark" />
-    </>
-  )
+function makePc(id: string, zoneId: string): Entity {
+  return {
+    id,
+    kind: 'pc',
+    name: 'PC-1',
+    status: { alive: true, conditions: [] },
+    position: { zoneId },
+    stats: {},
+  } as any
+}
+
+function makeEnemy(id: string, zoneId: string): Entity {
+  return {
+    id,
+    kind: 'enemy',
+    name: 'Enemy-1',
+    status: { alive: true, conditions: [] },
+    position: { zoneId },
+    stats: {},
+  } as any
 }
 
 export default function Home() {
+  const eventStore = useMemo(() => new EventStore(), [])
+  const orch = useMemo(() => new Orchestrator(eventStore), [eventStore])
+
+  const [gameId, setGameId] = useState<string | null>(null)
+  const [state, setState] = useState<GameState | null>(null)
+  const [events, setEvents] = useState<GameEvent[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  async function refresh(id: string) {
+    const [s, e] = await Promise.all([orch.loadState(id), eventStore.list(id)])
+    setState(s)
+    setEvents(e)
+  }
+
+  async function createGame() {
+    setError(null)
+    try {
+      const id = crypto.randomUUID()
+      await orch.dispatch(id, { type: 'CreateGame', schemaVersion: 1, seed: 'web-demo' })
+      setGameId(id)
+      await refresh(id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function setupEncounter() {
+    if (!gameId) return
+    setError(null)
+    try {
+      const pcId = 'pc-1'
+      const enemyId = 'enemy-1'
+
+      await orch.dispatch(gameId, { type: 'SetMode', mode: 'encounter' })
+      await orch.dispatch(gameId, { type: 'SetEncounterMap', map: makeDemoMap() })
+
+      await orch.dispatch(gameId, { type: 'AddEntity', entity: makePc(pcId, 'a') })
+      await orch.dispatch(gameId, { type: 'AddEntity', entity: makeEnemy(enemyId, 'a') })
+
+      await orch.dispatch(gameId, { type: 'SetInitiative', order: [pcId, enemyId] })
+      await orch.dispatch(gameId, { type: 'SetPhase', phase: 'initiative' })
+
+      await refresh(gameId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function startTurn() {
+    if (!gameId) return
+    setError(null)
+    try {
+      await orch.dispatch(gameId, { type: 'StartTurn' })
+      await refresh(gameId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function attack() {
+    if (!gameId) return
+    setError(null)
+    try {
+      await orch.dispatch(gameId, { type: 'Attack', attackerId: 'pc-1', targetId: 'enemy-1' })
+      await refresh(gameId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function endTurn() {
+    if (!gameId) return
+    setError(null)
+    try {
+      await orch.dispatch(gameId, { type: 'EndTurn' })
+      await refresh(gameId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   return (
     <div className={styles.page}>
       <main className={styles.main}>
-        <ThemeImage
-          className={styles.logo}
-          srcLight="turborepo-dark.svg"
-          srcDark="turborepo-light.svg"
-          alt="Turborepo logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>apps/web/app/page.tsx</code>
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+        <Card className="p-4">
+          <CardHeader></CardHeader>
+          <CardContent className="flex gap-10 p-4">
+            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={createGame}>
+              Create game
+            </Button>
+            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={setupEncounter} disabled={!gameId}>
+              Setup encounter
+            </Button>
+            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={startTurn} disabled={!gameId}>
+              Start turn
+            </Button>
+            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={attack} disabled={!gameId}>
+              Attack
+            </Button>
+            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={endTurn} disabled={!gameId}>
+              End turn
+            </Button>
+          </CardContent>
+        </Card>
+        <div className={styles.ctas} style={{ gap: 10 }}></div>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new/clone?demo-description=Learn+to+implement+a+monorepo+with+a+two+Next.js+sites+that+has+installed+three+local+packages.&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4K8ZISWAzJ8X1504ca0zmC%2F0b21a1c6246add355e55816278ef54bc%2FBasic.png&demo-title=Monorepo+with+Turborepo&demo-url=https%3A%2F%2Fexamples-basic-web.vercel.sh%2F&from=templates&project-name=Monorepo+with+Turborepo&repository-name=monorepo-turborepo&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fturborepo%2Ftree%2Fmain%2Fexamples%2Fbasic&root-directory=apps%2Fdocs&skippable-integrations=1&teamSlug=vercel&utm_source=create-turbo"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image className={styles.logo} src="/vercel.svg" alt="Vercel logomark" width={20} height={20} />
-            Deploy now
-          </a>
-          <a href="https://turborepo.dev/docs?utm_source" target="_blank" rel="noopener noreferrer" className={styles.secondary}>
-            Read our docs
-          </a>
-        </div>
-        <Button appName="web" className={styles.secondary}>
-          Open alert
-        </Button>
+        {error ? <pre style={{ whiteSpace: 'pre-wrap', padding: 12, border: '1px solid #f00' }}>{error}</pre> : null}
+
+        <h3 style={{ marginTop: 24 }}>Session</h3>
+        <pre style={{ padding: 12, border: '1px solid #333' }}>{pretty({ gameId, eventCount: events.length })}</pre>
+
+        <h3 style={{ marginTop: 24 }}>GameState</h3>
+        <pre style={{ padding: 12, border: '1px solid #333', overflow: 'auto', maxHeight: 340 }}>{state ? pretty(state) : 'No state yet'}</pre>
+
+        <h3 style={{ marginTop: 24 }}>Events</h3>
+        <pre style={{ padding: 12, border: '1px solid #333', overflow: 'auto', maxHeight: 340 }}>
+          {events.length ? pretty(events) : 'No events yet'}
+        </pre>
       </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com/templates?search=turborepo&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/window.svg" alt="Window icon" width={16} height={16} />
-          Examples
-        </a>
-        <a href="https://turborepo.dev?utm_source=create-turbo" target="_blank" rel="noopener noreferrer">
-          <Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
-          Go to turborepo.dev →
-        </a>
-      </footer>
     </div>
   )
 }

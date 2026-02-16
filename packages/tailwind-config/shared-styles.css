@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "./shadcn-colors-extension.css";
+@import "./leonardo-colors-extension.css";
+
+.w-full .p-icon-field {
+  width: 100%;
+}
