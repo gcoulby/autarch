@@ -1,0 +1,5 @@
+export type { ILLMClient, GPT4AllConfig } from './interfaces.js'
+export { GPT4AllClient } from './clients/GPT4AllClient.js'
+export { StubLLMClient } from './clients/StubLLMClient.js'
+export { NarrativeService } from './NarrativeService.js'
+export type { NarrateOptions, NarrateResult } from './NarrativeService.js'

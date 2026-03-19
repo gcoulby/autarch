@@ -1,0 +1,35 @@
+{
+  "name": "@autarch/llm",
+  "version": "1.0.0",
+  "description": "LLM integration layer — GPT4All client and narrative generation service",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf dist",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@autarch/context": "workspace:*",
+    "@autarch/vector-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@autarch/engine": "workspace:*",
+    "@autarch/persistence": "workspace:*",
+    "@autarch/knowledge-graph": "workspace:*",
+    "@autarch/runtime": "workspace:*",
+    "@autarch/typescript-config": "workspace:*",
+    "@types/node": "^25.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
