@@ -1,0 +1,34 @@
+{
+  "name": "@autarch/context",
+  "version": "1.0.0",
+  "description": "Context model service — assembles structured prompts for the LLM narrative layer",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf dist",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@autarch/engine": "workspace:*",
+    "@autarch/persistence": "workspace:*",
+    "@autarch/knowledge-graph": "workspace:*",
+    "@autarch/vector-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@autarch/runtime": "workspace:*",
+    "@autarch/typescript-config": "workspace:*",
+    "@types/node": "^25.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

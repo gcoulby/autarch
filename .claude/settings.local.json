@@ -8,7 +8,9 @@
       "Bash(pnpm install:*)",
       "Bash(pnpm --filter @autarch/persistence build)",
       "Bash(pnpm --filter @autarch/knowledge-graph build)",
-      "Bash(pnpm --filter @autarch/vector-store build)"
+      "Bash(pnpm --filter @autarch/vector-store build)",
+      "Bash(pnpm --filter @autarch/runtime build)",
+      "Bash(pnpm --filter @autarch/context build)"
     ]
   }
 }
