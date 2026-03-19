@@ -11,7 +11,9 @@
       "Bash(pnpm --filter @autarch/vector-store build)",
       "Bash(pnpm --filter @autarch/runtime build)",
       "Bash(pnpm --filter @autarch/context build)",
-      "Bash(pnpm --filter @autarch/llm build)"
+      "Bash(pnpm --filter @autarch/llm build)",
+      "Bash(pnpm --filter @autarch/web check-types)",
+      "Bash(pnpm --filter @autarch/web build)"
     ]
   }
 }

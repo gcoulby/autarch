@@ -11,10 +11,14 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@autarch/context": "workspace:*",
     "@autarch/engine": "workspace:*",
+    "@autarch/knowledge-graph": "workspace:*",
+    "@autarch/llm": "workspace:*",
     "@autarch/persistence": "workspace:*",
     "@autarch/runtime": "workspace:*",
     "@autarch/ui": "workspace:*",
+    "@autarch/vector-store": "workspace:*",
     "next": "16.1.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

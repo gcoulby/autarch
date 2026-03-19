@@ -1,173 +1,74 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useGame } from './hooks/useGame'
+import { SceneView } from './components/SceneView'
+import { EncounterView } from './components/EncounterView'
+import { NarrativePanel } from './components/NarrativePanel'
+import { LlmSettings } from './components/LlmSettings'
 import { Button } from '@autarch/ui/components/ui/button'
-import styles from './page.module.css'
-
-import { Orchestrator } from '@autarch/runtime'
-import { EventStore } from '@autarch/persistence'
-import type { Entity, GameEvent, GameState, EncounterMap } from '@autarch/engine'
-import { Card, CardContent, CardHeader } from '@autarch/ui/components/ui/card'
-
-function pretty(x: unknown) {
-  return JSON.stringify(x, null, 2)
-}
-
-function makeDemoMap(): EncounterMap {
-  return {
-    zones: {
-      a: { id: 'a', name: 'Zone A', adjacent: ['b'] },
-      b: { id: 'b', name: 'Zone B', adjacent: ['a'] },
-    },
-  } as any
-}
-
-function makePc(id: string, zoneId: string): Entity {
-  return {
-    id,
-    kind: 'pc',
-    name: 'PC-1',
-    status: { alive: true, conditions: [] },
-    position: { zoneId },
-    stats: {},
-  } as any
-}
-
-function makeEnemy(id: string, zoneId: string): Entity {
-  return {
-    id,
-    kind: 'enemy',
-    name: 'Enemy-1',
-    status: { alive: true, conditions: [] },
-    position: { zoneId },
-    stats: {},
-  } as any
-}
 
 export default function Home() {
-  const eventStore = useMemo(() => new EventStore(), [])
-  const orch = useMemo(() => new Orchestrator(eventStore), [eventStore])
-
-  const [gameId, setGameId] = useState<string | null>(null)
-  const [state, setState] = useState<GameState | null>(null)
-  const [events, setEvents] = useState<GameEvent[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  async function refresh(id: string) {
-    const [s, e] = await Promise.all([orch.loadState(id), eventStore.list(id)])
-    setState(s)
-    setEvents(e)
-  }
-
-  async function createGame() {
-    setError(null)
-    try {
-      const id = crypto.randomUUID()
-      await orch.dispatch(id, { type: 'CreateGame', schemaVersion: 1, seed: 'web-demo' })
-      setGameId(id)
-      await refresh(id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function setupEncounter() {
-    if (!gameId) return
-    setError(null)
-    try {
-      const pcId = 'pc-1'
-      // const enemyId = 'enemy-1'
-      const enemies = []
-
-      await orch.dispatch(gameId, { type: 'SetMode', mode: 'encounter' })
-      await orch.dispatch(gameId, { type: 'SetEncounterMap', map: makeDemoMap() })
-
-      await orch.dispatch(gameId, { type: 'AddEntity', entity: makePc(pcId, 'a') })
-      for (let i = 0; i < 5; i++) {
-        const enemyId = `enemy-${i}`
-        await orch.dispatch(gameId, { type: 'AddEntity', entity: makeEnemy(enemyId, 'a') })
-        enemies.push(enemyId)
-      }
-
-      await orch.dispatch(gameId, { type: 'SetInitiative', order: [pcId, ...enemies] })
-      await orch.dispatch(gameId, { type: 'SetPhase', phase: 'initiative' })
-
-      await refresh(gameId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function startTurn() {
-    if (!gameId) return
-    setError(null)
-    try {
-      await orch.dispatch(gameId, { type: 'StartTurn' })
-      await refresh(gameId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function attack() {
-    if (!gameId) return
-    setError(null)
-    try {
-      await orch.dispatch(gameId, { type: 'Attack', attackerId: 'pc-1', targetId: 'enemy-1' })
-      await refresh(gameId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function endTurn() {
-    if (!gameId) return
-    setError(null)
-    try {
-      await orch.dispatch(gameId, { type: 'EndTurn' })
-      await refresh(gameId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
+  const { session, llmUrl, applyLlmUrl, createGame, dispatch } = useGame()
 
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Card className="p-4">
-          <CardHeader></CardHeader>
-          <CardContent className="flex gap-10 p-4">
-            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={createGame}>
-              Create game
-            </Button>
-            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={setupEncounter} disabled={!gameId}>
-              Setup encounter
-            </Button>
-            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={startTurn} disabled={!gameId}>
-              Start turn
-            </Button>
-            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={attack} disabled={!gameId}>
-              Attack
-            </Button>
-            <Button className="bg-muted hover:bg-muted/40 p-2 cursor-pointer" onClick={endTurn} disabled={!gameId}>
-              End turn
-            </Button>
-          </CardContent>
-        </Card>
-        <div className={styles.ctas} style={{ gap: 10 }}></div>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      {/* Top bar */}
+      <header className="border-b border-zinc-800 px-4 py-2 flex items-center justify-between gap-4">
+        <span className="font-bold tracking-wide text-zinc-200 text-sm">AUTARCH</span>
+        <LlmSettings llmUrl={llmUrl} onApply={applyLlmUrl} />
+        <Button
+          size="sm"
+          className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs h-7"
+          onClick={createGame}
+        >
+          New game
+        </Button>
+      </header>
 
-        {error ? <pre style={{ whiteSpace: 'pre-wrap', padding: 12, border: '1px solid #f00' }}>{error}</pre> : null}
+      {/* Body */}
+      <main className="flex-1 p-4 space-y-4 max-w-6xl mx-auto w-full">
+        {!session ? (
+          <div className="flex flex-col items-center justify-center h-64 space-y-4 text-zinc-500">
+            <p className="text-lg">No active game</p>
+            <Button
+              className="bg-zinc-700 hover:bg-zinc-600 text-white"
+              onClick={createGame}
+            >
+              Start a new game
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* Error banner */}
+            {session.error && (
+              <div className="rounded border border-red-800 bg-red-950/50 px-4 py-2 text-xs text-red-300">
+                {session.error}
+              </div>
+            )}
 
-        <h3 style={{ marginTop: 24 }}>Session</h3>
-        <pre style={{ padding: 12, border: '1px solid #333' }}>{pretty({ gameId, eventCount: events.length })}</pre>
+            {/* Game view — scene or encounter */}
+            {session.state.runtime.mode === 'encounter' ? (
+              <EncounterView
+                state={session.state}
+                actions={session.actions}
+                onDispatch={dispatch}
+              />
+            ) : (
+              <SceneView
+                state={session.state}
+                actions={session.actions}
+                onDispatch={dispatch}
+              />
+            )}
 
-        <h3 style={{ marginTop: 24 }}>GameState</h3>
-        <pre style={{ padding: 12, border: '1px solid #333', overflow: 'auto', maxHeight: 340 }}>{state ? pretty(state) : 'No state yet'}</pre>
-
-        <h3 style={{ marginTop: 24 }}>Events</h3>
-        <pre style={{ padding: 12, border: '1px solid #333', overflow: 'auto', maxHeight: 340 }}>
-          {events.length ? pretty(events) : 'No events yet'}
-        </pre>
+            {/* Narrative panel */}
+            <NarrativePanel
+              narrative={session.narrative}
+              prompt={session.prompt}
+              narrating={session.narrating}
+            />
+          </>
+        )}
       </main>
     </div>
   )

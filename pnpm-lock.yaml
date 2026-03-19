@@ -23,9 +23,18 @@ importers:
 
   apps/web:
     dependencies:
+      '@autarch/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@autarch/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@autarch/knowledge-graph':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-graph
+      '@autarch/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@autarch/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
@@ -35,6 +44,9 @@ importers:
       '@autarch/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@autarch/vector-store':
+        specifier: workspace:*
+        version: link:../../packages/vector-store
       next:
         specifier: 16.1.5
         version: 16.1.5(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
