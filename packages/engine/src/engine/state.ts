@@ -1,10 +1,10 @@
 import { GameState } from '../types/game.js'
 
-export function createInitialState(gameId: string, schemaVersion: number, createdAt: string): GameState {
+export function createInitialState(gameId: string, schemaVersion: number, createdAt: string, seed = ''): GameState {
   return {
     _id: gameId,
     schemaVersion,
-    meta: { createdAt },
+    meta: { createdAt, seed },
     runtime: {
       mode: 'scene',
       phase: 'setup',

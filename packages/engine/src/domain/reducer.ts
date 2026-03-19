@@ -10,9 +10,10 @@ export function applyEvent(state: GameState, ev: GameEvent): GameState {
   switch (ev.type) {
     case 'GameCreated': {
       // Normally you would not apply this to an existing state, but it is safe.
-      const p = ev.payload as { schemaVersion: number; createdAt: string }
+      const p = ev.payload as { schemaVersion: number; createdAt: string; seed: string }
       next.schemaVersion = p.schemaVersion
       next.meta.createdAt = p.createdAt
+      next.meta.seed = p.seed ?? ''
       return next
     }
 
@@ -57,6 +58,13 @@ export function applyEvent(state: GameState, ev: GameEvent): GameState {
       next.runtime.activeEntityId = null
       next.runtime.activeSide = 'system'
       next.runtime.encounterResult = p.result
+
+      // M4 — chaos factor: win decreases chaos, loss increases it (clamped 1–9)
+      if (p.result === 'win') {
+        next.runtime.chaos = Math.max(1, next.runtime.chaos - 1)
+      } else {
+        next.runtime.chaos = Math.min(9, next.runtime.chaos + 1)
+      }
 
       return next
     }
@@ -150,6 +158,42 @@ export function applyEvent(state: GameState, ev: GameEvent): GameState {
       assert(next.runtime.activeEntityId === p.entityId, 'TurnEnded entity does not match activeEntityId')
       next.runtime.activeEntityId = null
       next.runtime.activeSide = 'system'
+      return next
+    }
+
+    // M4 — Fate mechanics
+
+    case 'RollMade': {
+      // Records a roll in the event log for narrative purposes; no state mutation.
+      return next
+    }
+
+    case 'AspectInvoked': {
+      const p = ev.payload as { entityId: string; aspectId: string; usedFreeInvoke: boolean }
+      const ent = requireEntity(next, p.entityId)
+      const aspects = ent.stats.aspects.map((a) => {
+        if (a.id !== p.aspectId) return a
+        if (p.usedFreeInvoke) {
+          assert(a.freeInvokes > 0, 'No free invokes remaining on this aspect')
+          return { ...a, freeInvokes: a.freeInvokes - 1 }
+        }
+        return a
+      })
+      const resources = p.usedFreeInvoke
+        ? ent.stats.resources
+        : { ...ent.stats.resources, fatePoints: (ent.stats.resources.fatePoints ?? 0) - 1 }
+      next.entities[p.entityId] = { ...ent, stats: { ...ent.stats, aspects, resources } }
+      return next
+    }
+
+    case 'AspectCompelled': {
+      const p = ev.payload as { entityId: string; aspectId: string }
+      const ent = requireEntity(next, p.entityId)
+      const fatePoints = (ent.stats.resources.fatePoints ?? 0) + 1
+      next.entities[p.entityId] = {
+        ...ent,
+        stats: { ...ent.stats, resources: { ...ent.stats.resources, fatePoints } },
+      }
       return next
     }
 

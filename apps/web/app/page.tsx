@@ -76,15 +76,20 @@ export default function Home() {
     setError(null)
     try {
       const pcId = 'pc-1'
-      const enemyId = 'enemy-1'
+      // const enemyId = 'enemy-1'
+      const enemies = []
 
       await orch.dispatch(gameId, { type: 'SetMode', mode: 'encounter' })
       await orch.dispatch(gameId, { type: 'SetEncounterMap', map: makeDemoMap() })
 
       await orch.dispatch(gameId, { type: 'AddEntity', entity: makePc(pcId, 'a') })
-      await orch.dispatch(gameId, { type: 'AddEntity', entity: makeEnemy(enemyId, 'a') })
+      for (let i = 0; i < 5; i++) {
+        const enemyId = `enemy-${i}`
+        await orch.dispatch(gameId, { type: 'AddEntity', entity: makeEnemy(enemyId, 'a') })
+        enemies.push(enemyId)
+      }
 
-      await orch.dispatch(gameId, { type: 'SetInitiative', order: [pcId, enemyId] })
+      await orch.dispatch(gameId, { type: 'SetInitiative', order: [pcId, ...enemies] })
       await orch.dispatch(gameId, { type: 'SetPhase', phase: 'initiative' })
 
       await refresh(gameId)

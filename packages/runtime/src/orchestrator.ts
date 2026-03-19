@@ -1,5 +1,5 @@
 import type { EncounterMap, Entity, GameEvent, GameState } from '@autarch/engine'
-import { assert, isEncounterMode, requireEntity } from '@autarch/engine'
+import { assert, isEncounterMode, requireEntity, rollFateDice, sumRolls } from '@autarch/engine'
 import { replay } from '@autarch/engine'
 import type { EventStore, StateStore } from '@autarch/persistence'
 import { runAiTurn } from '@autarch/engine'
@@ -56,6 +56,11 @@ export type Command =
   | { type: 'SetEncounterMap'; map: EncounterMap }
   | { type: 'Move'; entityId: string; toZoneId: string }
   | { type: 'Attack'; attackerId: string; targetId: string }
+  // M4 — Fate mechanics
+  | { type: 'FateAttack'; attackerId: string; targetId: string }
+  | { type: 'InvokeAspect'; entityId: string; aspectId: string; bonus: 'plus2' | 'reroll' }
+  | { type: 'CompelAspect'; entityId: string; aspectId: string }
+  | { type: 'TakeConsequence'; entityId: string; severity: 'mild' | 'moderate' | 'severe'; name: string }
 
 export class Orchestrator {
   constructor(
@@ -180,6 +185,144 @@ export class Orchestrator {
                 entityId: cmd.targetId,
                 amount: 1,
                 sourceEntityId: cmd.attackerId,
+              },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        // M4 — Fate mechanics
+
+        case 'FateAttack': {
+          assert(state.runtime.mode === 'encounter', 'FateAttack requires encounter mode')
+          assert(state.runtime.phase === 'turn', 'FateAttack only allowed in turn phase')
+          assert(state.runtime.activeEntityId === cmd.attackerId, 'FateAttack must be by the active entity')
+
+          const attacker = requireEntity(state, cmd.attackerId)
+          const target = requireEntity(state, cmd.targetId)
+
+          assert(target.status.alive, 'Target is not alive')
+          assert(areOpponents(attacker.kind, target.kind), 'Cannot attack an ally')
+
+          const attackerZoneId = getZoneId(state, cmd.attackerId)
+          const targetZoneId = getZoneId(state, cmd.targetId)
+          assert(attackerZoneId && targetZoneId, 'Attacker/target missing position.zoneId')
+          assert(attackerZoneId === targetZoneId, 'Target not in range (must be same zone)')
+
+          const gameSeed = state.meta.seed
+          const rollSeq = seq + 1 // seq of the events we're about to emit
+
+          const attackRolls = rollFateDice(gameSeed, rollSeq, 4, 'atk')
+          const defenseRolls = rollFateDice(gameSeed, rollSeq, 4, 'def')
+
+          const atkSkill = (attacker.stats.skills ?? []).find((s) => s.id === 'fight')?.rating ?? 0
+          const defSkill = (target.stats.skills ?? []).find((s) => s.id === 'athletics')?.rating ?? 0
+
+          const atkTotal = sumRolls(attackRolls) + atkSkill
+          const defTotal = sumRolls(defenseRolls) + defSkill
+          const shifts = atkTotal - defTotal
+
+          // Always emit RollMade so the narrative layer can describe what happened
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'RollMade',
+              {
+                attackerId: cmd.attackerId,
+                targetId: cmd.targetId,
+                attackRolls,
+                defenseRolls,
+                attackSkillRating: atkSkill,
+                defenseSkillRating: defSkill,
+                shifts,
+              },
+              actorId,
+            ),
+          )
+
+          if (shifts > 0) {
+            const damageEvent = this.makeEvent(
+              gameId,
+              nextSeq(),
+              'EntityDamaged',
+              { entityId: cmd.targetId, amount: shifts, sourceEntityId: cmd.attackerId },
+              actorId,
+            )
+            damageEvent.rng = {
+              seed: `${gameSeed}:${damageEvent.seq}`,
+              rolls: [...attackRolls, ...defenseRolls],
+            }
+            eventsToAppend.push(damageEvent)
+          }
+          break
+        }
+
+        case 'InvokeAspect': {
+          const invoker = requireEntity(state, cmd.entityId)
+          const aspect = invoker.stats.aspects.find((a) => a.id === cmd.aspectId)
+          assert(aspect, `Aspect '${cmd.aspectId}' not found on entity '${cmd.entityId}'`)
+
+          const hasFreeInvoke = aspect.freeInvokes > 0
+          const fatePoints = invoker.stats.resources.fatePoints ?? 0
+          assert(hasFreeInvoke || fatePoints >= 1, 'No free invokes and insufficient fate points to invoke aspect')
+
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'AspectInvoked',
+              {
+                entityId: cmd.entityId,
+                aspectId: cmd.aspectId,
+                usedFreeInvoke: hasFreeInvoke,
+                bonus: cmd.bonus,
+              },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        case 'CompelAspect': {
+          const compelled = requireEntity(state, cmd.entityId)
+          const compelAspect = compelled.stats.aspects.find((a) => a.id === cmd.aspectId)
+          assert(compelAspect, `Aspect '${cmd.aspectId}' not found on entity '${cmd.entityId}'`)
+
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'AspectCompelled',
+              { entityId: cmd.entityId, aspectId: cmd.aspectId },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        case 'TakeConsequence': {
+          const entity = requireEntity(state, cmd.entityId)
+          const existing = entity.stats.aspects.find(
+            (a) => a.consequenceSeverity === cmd.severity,
+          )
+          assert(!existing, `Entity already has a ${cmd.severity} consequence`)
+
+          const consequenceId = `consequence-${cmd.severity}-${cmd.entityId}`
+          const newAspects = [
+            ...entity.stats.aspects,
+            { id: consequenceId, name: cmd.name, freeInvokes: 0, consequenceSeverity: cmd.severity },
+          ]
+
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'EntityPatched',
+              {
+                entityId: cmd.entityId,
+                patch: { stats: { ...entity.stats, aspects: newAspects } },
               },
               actorId,
             ),

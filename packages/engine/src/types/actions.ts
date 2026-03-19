@@ -20,6 +20,11 @@ export type CommandDescriptor =
   | { type: 'EndTurn' }
   | { type: 'Move'; entityId: string; toZoneId: string }
   | { type: 'Attack'; attackerId: string; targetId: string }
+  // M4 — Fate mechanics
+  | { type: 'FateAttack'; attackerId: string; targetId: string }
+  | { type: 'InvokeAspect'; entityId: string; aspectId: string; bonus: 'plus2' | 'reroll' }
+  | { type: 'CompelAspect'; entityId: string; aspectId: string }
+  | { type: 'TakeConsequence'; entityId: string; severity: 'mild' | 'moderate' | 'severe'; name: string }
 
 export type ActionId =
   | 'create-game'
@@ -34,6 +39,11 @@ export type ActionId =
   | 'end-turn'
   | 'move'
   | 'attack'
+  // M4 — Fate mechanics
+  | 'fate-attack'
+  | 'invoke-aspect'
+  | 'compel-aspect'
+  | 'take-consequence'
 
 export interface ActionDescriptor {
   id: ActionId

@@ -14,6 +14,31 @@ export type GameEventType =
   | 'EntityMoved'
   | 'EntityDamaged'
   | 'EncounterEnded'
+  // M4 — Fate mechanics
+  | 'RollMade'
+  | 'AspectInvoked'
+  | 'AspectCompelled'
+
+export interface Skill {
+  id: string
+  name: string
+  rating: number
+}
+
+export interface Stunt {
+  id: string
+  name: string
+  description: string
+  skillId?: string
+}
+
+export interface Aspect {
+  id: string
+  name: string
+  freeInvokes: number
+  /** 'mild' | 'moderate' | 'severe' if this is a consequence */
+  consequenceSeverity?: 'mild' | 'moderate' | 'severe'
+}
 
 export interface Entity {
   id: string
@@ -32,12 +57,10 @@ export interface Entity {
   stats: {
     stress: number
     maxStress: number
-    aspects: {
-      id: string
-      name: string
-      freeInvokes: number
-    }[]
+    aspects: Aspect[]
     resources: Record<string, number>
+    skills?: Skill[]
+    stunts?: Stunt[]
   }
 
   tags: string[]
@@ -49,6 +72,7 @@ export interface GameState {
 
   meta: {
     createdAt: string
+    seed: string
   }
 
   runtime: {
@@ -133,4 +157,30 @@ type EntityDamagedPayload = {
 type EntityDefeatedPayload = {
   entityId: string
   byEntityId?: string
+}
+
+// M4 — Fate mechanics payload types
+
+export type RollResult = { die: string; result: number }
+
+export type RollMadePayload = {
+  attackerId: string
+  targetId: string
+  attackRolls: RollResult[]
+  defenseRolls: RollResult[]
+  attackSkillRating: number
+  defenseSkillRating: number
+  shifts: number
+}
+
+export type AspectInvokedPayload = {
+  entityId: string
+  aspectId: string
+  usedFreeInvoke: boolean
+  bonus: 'plus2' | 'reroll'
+}
+
+export type AspectCompelledPayload = {
+  entityId: string
+  aspectId: string
 }
