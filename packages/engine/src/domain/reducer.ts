@@ -28,6 +28,12 @@ export function applyEvent(state: GameState, ev: GameEvent): GameState {
       } else {
         next.encounter ??= { initiative: [], initiativeIndex: 0, map: undefined }
       }
+
+      // M5 — initialise scene graph when entering scene mode
+      if (p.mode === 'scene') {
+        next.scene ??= { locationId: null, locations: {} }
+      }
+
       return next
     }
 
@@ -158,6 +164,70 @@ export function applyEvent(state: GameState, ev: GameEvent): GameState {
       assert(next.runtime.activeEntityId === p.entityId, 'TurnEnded entity does not match activeEntityId')
       next.runtime.activeEntityId = null
       next.runtime.activeSide = 'system'
+      return next
+    }
+
+    // M5 — Scene mode
+
+    case 'SceneStarted': {
+      // Narrative marker only — scene state is initialised via ModeSet.
+      return next
+    }
+
+    case 'LocationAdded': {
+      const p = ev.payload as { location: import('../types/game.js').Location }
+      assert(next.scene, 'LocationAdded requires scene state — set mode to scene first')
+      next.scene.locations[p.location.id] = p.location
+      return next
+    }
+
+    case 'LocationChanged': {
+      const p = ev.payload as { fromLocationId: string | null; toLocationId: string }
+      assert(next.scene, 'LocationChanged requires scene state')
+      assert(next.scene.locations[p.toLocationId], `Location '${p.toLocationId}' not found in scene graph`)
+      next.scene.locationId = p.toLocationId
+      return next
+    }
+
+    case 'LocationAspectAdded': {
+      const p = ev.payload as { locationId: string; aspect: import('../types/game.js').Aspect }
+      assert(next.scene, 'LocationAspectAdded requires scene state')
+      const loc = next.scene.locations[p.locationId]
+      assert(loc, `Location '${p.locationId}' not found`)
+      loc.aspects = [...loc.aspects, p.aspect]
+      return next
+    }
+
+    case 'Rested': {
+      // Narrative marker — actual stress recovery is applied via EntityPatched events.
+      return next
+    }
+
+    case 'Interacted': {
+      // Narrative marker — dialogue / narrative handled by the context model service (M8).
+      return next
+    }
+
+    case 'SceneEnded': {
+      const p = ev.payload as { result: 'success' | 'failure' }
+      if (p.result === 'success') {
+        next.runtime.chaos = Math.max(1, next.runtime.chaos - 1)
+      } else {
+        next.runtime.chaos = Math.min(9, next.runtime.chaos + 1)
+      }
+      return next
+    }
+
+    // M6 — Oracle
+
+    case 'OracleAnswered': {
+      // All oracle data lives in the event payload for the narrative layer (M8).
+      // No state mutation needed — chaos is not changed by oracle questions.
+      return next
+    }
+
+    case 'RandomEventTriggered': {
+      // Narrative hook only — the context model service (M8) will narrate the event.
       return next
     }
 

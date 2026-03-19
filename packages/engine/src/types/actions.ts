@@ -25,6 +25,16 @@ export type CommandDescriptor =
   | { type: 'InvokeAspect'; entityId: string; aspectId: string; bonus: 'plus2' | 'reroll' }
   | { type: 'CompelAspect'; entityId: string; aspectId: string }
   | { type: 'TakeConsequence'; entityId: string; severity: 'mild' | 'moderate' | 'severe'; name: string }
+  // M5 — Scene mode
+  | { type: 'AddLocation'; location: import('./game.js').Location }
+  | { type: 'SetLocation'; locationId: string }
+  | { type: 'Travel'; toLocationId: string }
+  | { type: 'Rest' }
+  | { type: 'Search'; aspectName: string }
+  | { type: 'Interact'; entityId: string }
+  | { type: 'EndScene'; result: 'success' | 'failure' }
+  // M6 — Oracle
+  | { type: 'AskOracle'; question: string; likelihood: import('../domain/oracle.js').OracleLikelihood }
 
 export type ActionId =
   | 'create-game'
@@ -44,6 +54,16 @@ export type ActionId =
   | 'invoke-aspect'
   | 'compel-aspect'
   | 'take-consequence'
+  // M5 — Scene mode
+  | 'add-location'
+  | 'set-location'
+  | 'travel'
+  | 'rest'
+  | 'search'
+  | 'interact'
+  | 'end-scene'
+  // M6 — Oracle
+  | 'ask-oracle'
 
 export interface ActionDescriptor {
   id: ActionId

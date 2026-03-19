@@ -1,5 +1,5 @@
-import type { EncounterMap, Entity, GameEvent, GameState } from '@autarch/engine'
-import { assert, isEncounterMode, requireEntity, rollFateDice, sumRolls } from '@autarch/engine'
+import type { EncounterMap, Entity, GameEvent, GameState, Location } from '@autarch/engine'
+import { assert, isEncounterMode, requireEntity, rollFateDice, rollD6Pair, sumRolls, resolveOracle, isRandomEvent } from '@autarch/engine'
 import { replay } from '@autarch/engine'
 import type { EventStore, StateStore } from '@autarch/persistence'
 import { runAiTurn } from '@autarch/engine'
@@ -61,6 +61,16 @@ export type Command =
   | { type: 'InvokeAspect'; entityId: string; aspectId: string; bonus: 'plus2' | 'reroll' }
   | { type: 'CompelAspect'; entityId: string; aspectId: string }
   | { type: 'TakeConsequence'; entityId: string; severity: 'mild' | 'moderate' | 'severe'; name: string }
+  // M5 — Scene mode
+  | { type: 'AddLocation'; location: Location }
+  // M6 — Oracle (imported separately to avoid circular type issues)
+  | { type: 'AskOracle'; question: string; likelihood: 'very-likely' | 'likely' | '50-50' | 'unlikely' | 'very-unlikely' }
+  | { type: 'SetLocation'; locationId: string }
+  | { type: 'Travel'; toLocationId: string }
+  | { type: 'Rest' }
+  | { type: 'Search'; aspectName: string }
+  | { type: 'Interact'; entityId: string }
+  | { type: 'EndScene'; result: 'success' | 'failure' }
 
 export class Orchestrator {
   constructor(
@@ -327,6 +337,184 @@ export class Orchestrator {
               actorId,
             ),
           )
+          break
+        }
+
+        // M5 — Scene mode
+
+        case 'AddLocation': {
+          assert(state.runtime.mode === 'scene', 'AddLocation requires scene mode')
+          assert(state.scene, 'AddLocation requires scene state — set mode to scene first')
+          assert(!state.scene.locations[cmd.location.id], `Location '${cmd.location.id}' already exists`)
+          eventsToAppend.push(
+            this.makeEvent(gameId, nextSeq(), 'LocationAdded', { location: cmd.location }, actorId),
+          )
+          break
+        }
+
+        case 'SetLocation': {
+          assert(state.runtime.mode === 'scene', 'SetLocation requires scene mode')
+          assert(state.scene, 'SetLocation requires scene state')
+          assert(state.scene.locations[cmd.locationId], `Location '${cmd.locationId}' not found in scene graph`)
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'LocationChanged',
+              { fromLocationId: state.scene.locationId, toLocationId: cmd.locationId },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        case 'Travel': {
+          assert(state.runtime.mode === 'scene', 'Travel requires scene mode')
+          assert(state.scene, 'Travel requires scene state')
+          assert(state.scene.locationId, 'Travel requires a current location — use SetLocation first')
+
+          const currentLoc = state.scene.locations[state.scene.locationId]
+          assert(currentLoc, 'Current location not found in scene graph')
+          assert(
+            currentLoc.connections.includes(cmd.toLocationId),
+            `Location '${cmd.toLocationId}' is not connected to '${state.scene.locationId}'`,
+          )
+          assert(state.scene.locations[cmd.toLocationId], `Destination location '${cmd.toLocationId}' not found in scene graph`)
+
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'LocationChanged',
+              { fromLocationId: state.scene.locationId, toLocationId: cmd.toLocationId },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        case 'Rest': {
+          assert(state.runtime.mode === 'scene', 'Rest requires scene mode')
+          assert(state.scene?.locationId, 'Rest requires a current location')
+
+          const locationId = state.scene!.locationId!
+          const pcsAtLocation = Object.values(state.entities).filter(
+            (e) => e.kind === 'pc' && e.status.alive && e.stats.stress > 0 && e.position?.zoneId === locationId,
+          )
+
+          // Narrative marker
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'Rested',
+              { locationId, entityIds: pcsAtLocation.map((e) => e.id) },
+              actorId,
+            ),
+          )
+
+          // Restore stress for each PC at this location
+          for (const pc of pcsAtLocation) {
+            eventsToAppend.push(
+              this.makeEvent(
+                gameId,
+                nextSeq(),
+                'EntityPatched',
+                { entityId: pc.id, patch: { stats: { ...pc.stats, stress: 0 } } },
+                actorId,
+              ),
+            )
+          }
+          break
+        }
+
+        case 'Search': {
+          assert(state.runtime.mode === 'scene', 'Search requires scene mode')
+          assert(state.scene?.locationId, 'Search requires a current location')
+          assert(cmd.aspectName.trim().length > 0, 'Search requires a non-empty aspectName')
+
+          const locationId = state.scene!.locationId!
+          const discoverySeq = nextSeq()
+          const aspectId = `discovered-${locationId}-${discoverySeq}`
+          const aspect = { id: aspectId, name: cmd.aspectName.trim(), freeInvokes: 1 }
+
+          eventsToAppend.push(
+            this.makeEvent(gameId, discoverySeq, 'LocationAspectAdded', { locationId, aspect }, actorId),
+          )
+          break
+        }
+
+        case 'Interact': {
+          assert(state.runtime.mode === 'scene', 'Interact requires scene mode')
+          assert(state.scene?.locationId, 'Interact requires a current location')
+
+          const npc = requireEntity(state, cmd.entityId)
+          assert(npc.kind === 'npc', `Entity '${cmd.entityId}' is not an NPC`)
+          assert(
+            npc.position?.zoneId === state.scene!.locationId,
+            `NPC '${cmd.entityId}' is not at the current location`,
+          )
+
+          eventsToAppend.push(
+            this.makeEvent(
+              gameId,
+              nextSeq(),
+              'Interacted',
+              { entityId: cmd.entityId, locationId: state.scene!.locationId! },
+              actorId,
+            ),
+          )
+          break
+        }
+
+        case 'EndScene': {
+          assert(state.runtime.mode === 'scene', 'EndScene requires scene mode')
+          eventsToAppend.push(
+            this.makeEvent(gameId, nextSeq(), 'SceneEnded', { result: cmd.result }, actorId),
+          )
+          break
+        }
+
+        // M6 — Oracle
+
+        case 'AskOracle': {
+          const oracleSeq = nextSeq()
+          const [d1, d2] = rollD6Pair(state.meta.seed, oracleSeq)
+          const chaos = state.runtime.chaos
+          const result = resolveOracle(d1.result, d2.result, cmd.likelihood, chaos)
+          const randomEvent = isRandomEvent(d1.result, d2.result, chaos)
+          const adjusted = d1.result + d2.result + { 'very-likely': 4, 'likely': 2, '50-50': 0, 'unlikely': -2, 'very-unlikely': -4 }[cmd.likelihood] + (chaos - 5)
+
+          const oracleEvent = this.makeEvent(
+            gameId,
+            oracleSeq,
+            'OracleAnswered',
+            {
+              question: cmd.question,
+              likelihood: cmd.likelihood,
+              chaosAtRoll: chaos,
+              die1: d1.result,
+              die2: d2.result,
+              adjusted,
+              result,
+              randomEventTriggered: randomEvent,
+            },
+            actorId,
+          )
+          oracleEvent.rng = { seed: `${state.meta.seed}:${oracleSeq}:oracle`, rolls: [d1, d2] }
+          eventsToAppend.push(oracleEvent)
+
+          if (randomEvent) {
+            eventsToAppend.push(
+              this.makeEvent(
+                gameId,
+                nextSeq(),
+                'RandomEventTriggered',
+                { chaos, triggerValue: d1.result },
+                actorId,
+              ),
+            )
+          }
           break
         }
 

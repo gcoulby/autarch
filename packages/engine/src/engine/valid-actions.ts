@@ -169,5 +169,57 @@ export function getValidActions(state: GameState): ActionDescriptor[] {
     }
   }
 
+  // M5 — Scene mode actions
+  if (mode === 'scene' && state.scene) {
+    const { scene } = state
+    const currentLoc = scene.locationId ? scene.locations[scene.locationId] : null
+
+    if (currentLoc) {
+      // Travel to each connected location
+      for (const connectionId of currentLoc.connections) {
+        const target = scene.locations[connectionId]
+        if (!target) continue
+        actions.push({
+          id: 'travel',
+          label: `Travel to ${target.name}`,
+          kind: 'player',
+          inputs: { kind: 'none' },
+          command: { type: 'Travel', toLocationId: connectionId },
+        })
+      }
+
+      // Rest — always available in a location
+      actions.push({
+        id: 'rest',
+        label: 'Rest',
+        kind: 'player',
+        inputs: { kind: 'none' },
+        command: { type: 'Rest' },
+      })
+
+      // Search — always available
+      actions.push({
+        id: 'search',
+        label: 'Search',
+        kind: 'player',
+        inputs: { kind: 'none' },
+        command: { type: 'Search', aspectName: '' },
+      })
+
+      // Interact — one action per NPC whose position matches current locationId
+      for (const [entityId, entity] of Object.entries(state.entities)) {
+        if (entity.kind !== 'npc') continue
+        if (entity.position?.zoneId !== scene.locationId) continue
+        actions.push({
+          id: 'interact',
+          label: `Interact with ${entity.name}`,
+          kind: 'player',
+          inputs: { kind: 'entity', id: entityId, label: entity.name },
+          command: { type: 'Interact', entityId },
+        })
+      }
+    }
+  }
+
   return actions
 }

@@ -18,6 +18,17 @@ export type GameEventType =
   | 'RollMade'
   | 'AspectInvoked'
   | 'AspectCompelled'
+  // M5 — Scene mode
+  | 'SceneStarted'
+  | 'LocationAdded'
+  | 'LocationChanged'
+  | 'LocationAspectAdded'
+  | 'Rested'
+  | 'Interacted'
+  | 'SceneEnded'
+  // M6 — Oracle
+  | 'OracleAnswered'
+  | 'RandomEventTriggered'
 
 export interface Skill {
   id: string
@@ -94,6 +105,7 @@ export interface GameState {
   entities: Record<string, Entity>
 
   encounter?: EncounterState
+  scene?: SceneState
 
   flags?: {
     locks: string[]
@@ -140,6 +152,22 @@ export type EncounterState = {
   map?: EncounterMap
 }
 
+// M5 — Scene mode
+
+export interface Location {
+  id: string
+  name: string
+  tags: string[]
+  aspects: Aspect[]
+  /** IDs of directly connected locations the player can travel to */
+  connections: string[]
+}
+
+export type SceneState = {
+  locationId: string | null
+  locations: Record<string, Location>
+}
+
 type EncounterMapSetPayload = { map: EncounterMap }
 
 type EntityMovedPayload = {
@@ -183,4 +211,50 @@ export type AspectInvokedPayload = {
 export type AspectCompelledPayload = {
   entityId: string
   aspectId: string
+}
+
+// M5 — Scene mode payload types
+
+export type LocationAddedPayload = { location: Location }
+
+export type LocationChangedPayload = {
+  fromLocationId: string | null
+  toLocationId: string
+}
+
+export type LocationAspectAddedPayload = {
+  locationId: string
+  aspect: Aspect
+}
+
+export type RestedPayload = {
+  locationId: string
+  entityIds: string[]
+}
+
+export type InteractedPayload = {
+  entityId: string
+  locationId: string
+}
+
+export type SceneEndedPayload = {
+  result: 'success' | 'failure'
+}
+
+// M6 — Oracle payload types
+
+export type OracleAnsweredPayload = {
+  question: string
+  likelihood: import('../domain/oracle.js').OracleLikelihood
+  chaosAtRoll: number
+  die1: number
+  die2: number
+  adjusted: number
+  result: import('../domain/oracle.js').OracleResult
+  randomEventTriggered: boolean
+}
+
+export type RandomEventTriggeredPayload = {
+  chaos: number
+  triggerValue: number
 }

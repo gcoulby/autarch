@@ -20,6 +20,7 @@ export function createInitialState(gameId: string, schemaVersion: number, create
     },
     entities: {},
     encounter: undefined,
+    scene: undefined,
     flags: { locks: [] },
     lastEventSeq: 0,
   }

@@ -64,3 +64,23 @@ export function rollFateDice(
 export function sumRolls(rolls: RollResult[]): number {
   return rolls.reduce((acc, r) => acc + r.result, 0)
 }
+
+/**
+ * Roll two standard d6 dice (results 1–6) deterministically.
+ * Used by the M6 oracle. Die names are `oracle-1` and `oracle-2` by default.
+ *
+ * @param gameSeed  - the seed stored in GameState.meta.seed
+ * @param eventSeq  - the seq number of the event that owns these rolls
+ * @param prefix    - die name prefix (default "oracle")
+ */
+export function rollD6Pair(
+  gameSeed: string,
+  eventSeq: number,
+  prefix = 'oracle',
+): [RollResult, RollResult] {
+  const key = `${gameSeed}:${eventSeq}:${prefix}`
+  const rng = mulberry32(fnv1a(key))
+  const die1: RollResult = { die: `${prefix}-1`, result: Math.floor(rng() * 6) + 1 }
+  const die2: RollResult = { die: `${prefix}-2`, result: Math.floor(rng() * 6) + 1 }
+  return [die1, die2]
+}
