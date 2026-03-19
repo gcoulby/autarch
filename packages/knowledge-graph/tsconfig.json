@@ -1,0 +1,12 @@
+{
+  "extends": "@autarch/typescript-config/base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["dist", "node_modules"]
+}

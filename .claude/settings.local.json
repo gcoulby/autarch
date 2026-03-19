@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(pnpm test:run)",
-      "Bash(pnpm --filter @autarch/engine build)"
+      "Bash(pnpm --filter @autarch/engine build)",
+      "Bash(pnpm --filter @autarch/persistence add mongodb)",
+      "Bash(pnpm --filter @autarch/persistence add -D mongodb-memory-server vitest)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm --filter @autarch/persistence build)",
+      "Bash(pnpm --filter @autarch/knowledge-graph build)",
+      "Bash(pnpm --filter @autarch/vector-store build)"
     ]
   }
 }

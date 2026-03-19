@@ -1,13 +1,11 @@
 {
-  "name": "@autarch/persistence",
+  "name": "@autarch/vector-store",
   "version": "1.0.0",
-  "description": "",
+  "description": "Narrative embedding store for Autarch — Qdrant adapter and in-memory implementation",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,21 +18,10 @@
     "test": "vitest",
     "test:run": "vitest run"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.12.1",
   "devDependencies": {
-    "@autarch/engine": "workspace:*",
     "@autarch/typescript-config": "workspace:*",
     "@types/node": "^25.1.0",
-    "mongodb-memory-server": "^11.0.1",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
-  },
-  "dependencies": {
-    "mongodb": "^7.1.0"
   }
 }

@@ -1,29 +1,9 @@
-import { Entity, GameEvent, GameState } from '@autarch/engine'
+import { Entity, GameState } from '@autarch/engine'
+import { MemoryEventStore, MemoryStateStore } from '@autarch/persistence'
 import { Orchestrator } from '../src/orchestrator'
 
-export class InMemoryEventStore {
-  private events: GameEvent[] = []
-  async append(event: GameEvent) {
-    this.events.push(event)
-  }
-  async list(gameId: string) {
-    return this.events.filter((e) => e.gameId === gameId).sort((a, b) => a.seq - b.seq)
-  }
-  async getLastSeq(gameId: string) {
-    const xs = this.events.filter((e) => e.gameId === gameId)
-    return xs.length ? Math.max(...xs.map((e) => e.seq)) : 0
-  }
-}
-
-export class InMemoryStateStore {
-  private map = new Map<string, GameState>()
-  async load(gameId: string) {
-    return this.map.get(gameId) ?? null
-  }
-  async save(state: GameState) {
-    this.map.set(state._id, state)
-  }
-}
+// Re-export under the names tests already use so no test files need to change
+export { MemoryEventStore as InMemoryEventStore, MemoryStateStore as InMemoryStateStore }
 
 export function makeEntity(id: string, kind: Entity['kind'], name: string, zoneId: string): Entity {
   return {
@@ -58,7 +38,7 @@ export async function setupEncounter(orch: any, gameId: string, pcZone: string, 
 
   await orch.dispatch(gameId, { type: 'SetInitiative', order: ['pc-1', 'e-1'] })
 
-  /// Advance to enter turn phase
+  // Advance to enter turn phase
   await orch.dispatch(gameId, { type: 'Advance' })
 
   await orch.dispatch(gameId, { type: 'StartRound' })
@@ -72,7 +52,7 @@ export async function killTarget(orch: Orchestrator, gameId: string, attackerId:
     if (!s) throw new Error('state missing')
 
     const target = s.entities[targetId]
-    if (!target.status.alive) return
+    if (!target!.status.alive) return
 
     await orch.dispatch(gameId, { type: 'Attack', attackerId, targetId })
   }

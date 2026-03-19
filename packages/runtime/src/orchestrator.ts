@@ -1,7 +1,7 @@
 import type { EncounterMap, Entity, GameEvent, GameState, Location } from '@autarch/engine'
 import { assert, isEncounterMode, requireEntity, rollFateDice, rollD6Pair, sumRolls, resolveOracle, isRandomEvent } from '@autarch/engine'
 import { replay } from '@autarch/engine'
-import type { EventStore, StateStore } from '@autarch/persistence'
+import type { IEventStore, IStateStore } from '@autarch/persistence'
 import { runAiTurn } from '@autarch/engine'
 
 function getZoneId(state: GameState, entityId: string): string | null {
@@ -74,8 +74,8 @@ export type Command =
 
 export class Orchestrator {
   constructor(
-    private eventStore: EventStore,
-    private stateStore?: StateStore,
+    private eventStore: IEventStore,
+    private stateStore?: IStateStore,
   ) {}
 
   private nowIso() {
