@@ -22,13 +22,19 @@ export const contextService = new ContextModelService(
   narrativeStore,
 )
 
+// NEXT_PUBLIC_LLM_URL is injected at build time by Next.js
+const ENV_LLM_URL = process.env.NEXT_PUBLIC_LLM_URL ?? ''
+const ENV_LLM_MODEL = process.env.NEXT_PUBLIC_LLM_MODEL ?? 'mistral'
+
 export function makeNarrativeService(llmUrl?: string): NarrativeService {
-  const llm = llmUrl
-    ? new GPT4AllClient({ baseUrl: llmUrl, model: 'gpt4all-default' })
+  const url = (llmUrl ?? ENV_LLM_URL).trim()
+  const llm = url
+    ? new GPT4AllClient({ baseUrl: url, model: ENV_LLM_MODEL })
     : new StubLLMClient((prompt) => {
-        // Offline stub: surface last 80 chars of prompt as a placeholder narrative
-        const tail = prompt.slice(-120).trim()
-        return `[Stub LLM] …${tail}`
+        const tail = prompt.slice(-160).trim()
+        return `[Stub narrative — connect an LLM to see real prose]\n\n…${tail}`
       })
   return new NarrativeService(contextService, llm, narrativeStore)
 }
+
+export { ENV_LLM_URL }

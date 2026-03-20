@@ -1,4 +1,7 @@
 services:
+
+  # ── Databases ──────────────────────────────────────────────────────────────
+
   mongo:
     image: mongo:8
     ports:
@@ -39,7 +42,67 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── LLM ───────────────────────────────────────────────────────────────────
+  #
+  # Ollama exposes its API at port 11434. Docker Desktop forwards this to
+  # localhost:11434 on the host machine. NEXT_PUBLIC_LLM_URL must use
+  # localhost (not the internal "ollama" hostname) because LLM requests are
+  # made by the browser, not by the Next.js server.
+  #
+  # GPU acceleration (NVIDIA): uncomment the `deploy` block below.
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Pull the default model once Ollama is healthy.
+  # Change OLLAMA_MODEL in your .env file to use a different model.
+  ollama-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ['/bin/sh', '-c', 'ollama pull ${OLLAMA_MODEL:-mistral}']
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: 'no'
+
+  # ── Web app ───────────────────────────────────────────────────────────────
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_LLM_URL: http://localhost:11434/v1
+        NEXT_PUBLIC_LLM_MODEL: ${OLLAMA_MODEL:-mistral}
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_LLM_URL=http://localhost:11434/v1
+      - NEXT_PUBLIC_LLM_MODEL=${OLLAMA_MODEL:-mistral}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   mongo-data:
   neo4j-data:
   qdrant-data:
+  ollama-models:

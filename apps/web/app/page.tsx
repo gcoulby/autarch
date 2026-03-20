@@ -5,48 +5,123 @@ import { SceneView } from './components/SceneView'
 import { EncounterView } from './components/EncounterView'
 import { NarrativePanel } from './components/NarrativePanel'
 import { LlmSettings } from './components/LlmSettings'
-import { Button } from '@autarch/ui/components/ui/button'
+import { ChaosMeter } from './components/ChaosMeter'
+
+const MODE_LABEL: Record<string, string> = {
+  scene:     'SCENE',
+  encounter: 'ENCOUNTER',
+  downtime:  'DOWNTIME',
+}
+
+const MODE_COLOR: Record<string, string> = {
+  scene:     'var(--game-travel)',
+  encounter: 'var(--game-danger)',
+  downtime:  'var(--game-safe)',
+}
 
 export default function Home() {
   const { session, llmUrl, applyLlmUrl, createGame, dispatch } = useGame()
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      {/* Top bar */}
-      <header className="border-b border-zinc-800 px-4 py-2 flex items-center justify-between gap-4">
-        <span className="font-bold tracking-wide text-zinc-200 text-sm">AUTARCH</span>
-        <LlmSettings llmUrl={llmUrl} onApply={applyLlmUrl} />
-        <Button
-          size="sm"
-          className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs h-7"
-          onClick={createGame}
-        >
-          New game
-        </Button>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--background)' }}>
+
+      {/* ── Top bar ─────────────────────────────────────────── */}
+      <header
+        className="flex items-center justify-between px-6 py-3 shrink-0"
+        style={{
+          background: 'var(--game-surface)',
+          borderBottom: '1px solid var(--game-border)',
+        }}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <span
+            className="text-lg font-bold tracking-[0.15em]"
+            style={{ color: 'var(--game-amber)' }}
+          >
+            AUTARCH
+          </span>
+          {session && (
+            <>
+              <span style={{ color: 'var(--game-border-warm)' }}>·</span>
+              {/* Mode badge */}
+              <span
+                className="text-[10px] font-semibold tracking-[0.12em] px-2 py-0.5 rounded"
+                style={{
+                  background: 'var(--game-surface-2)',
+                  border: `1px solid ${MODE_COLOR[session.state.runtime.mode] ?? 'var(--game-border)'}`,
+                  color: MODE_COLOR[session.state.runtime.mode] ?? 'var(--game-amber)',
+                }}
+              >
+                {MODE_LABEL[session.state.runtime.mode] ?? session.state.runtime.mode.toUpperCase()}
+              </span>
+              <ChaosMeter chaos={session.state.runtime.chaos} />
+            </>
+          )}
+        </div>
+
+        {/* Right controls */}
+        <div className="flex items-center gap-5">
+          <LlmSettings llmUrl={llmUrl} onApply={applyLlmUrl} />
+          <button
+            className="action-btn action-btn-player text-xs"
+            onClick={createGame}
+          >
+            ⊕ New Game
+          </button>
+        </div>
       </header>
 
-      {/* Body */}
-      <main className="flex-1 p-4 space-y-4 max-w-6xl mx-auto w-full">
+      {/* ── Body ──────────────────────────────────────────────── */}
+      <main className="flex-1 p-5 space-y-5 max-w-7xl mx-auto w-full">
+
         {!session ? (
-          <div className="flex flex-col items-center justify-center h-64 space-y-4 text-zinc-500">
-            <p className="text-lg">No active game</p>
-            <Button
-              className="bg-zinc-700 hover:bg-zinc-600 text-white"
-              onClick={createGame}
+          /* ── Empty state ── */
+          <div
+            className="flex flex-col items-center justify-center rounded-xl py-32 space-y-6"
+            style={{
+              background: 'var(--game-surface)',
+              border: '1px solid var(--game-border)',
+            }}
+          >
+            <p
+              className="text-5xl font-bold tracking-[0.2em]"
+              style={{ color: 'var(--game-amber)', opacity: 0.15 }}
             >
-              Start a new game
-            </Button>
+              AUTARCH
+            </p>
+            <p className="text-sm" style={{ color: 'oklch(0.48 0.018 68)' }}>
+              Solo RPG engine — no game active
+            </p>
+            <button className="action-btn action-btn-player text-sm px-8 py-3" onClick={createGame}>
+              ⊕ Begin a new game
+            </button>
           </div>
         ) : (
           <>
-            {/* Error banner */}
+            {/* ── Error banner ── */}
             {session.error && (
-              <div className="rounded border border-red-800 bg-red-950/50 px-4 py-2 text-xs text-red-300">
+              <div
+                className="rounded-lg px-4 py-3 text-sm flex items-center gap-3"
+                style={{
+                  background: 'var(--game-danger-bg)',
+                  border: '1px solid var(--game-danger-ring)',
+                  color: 'var(--game-danger)',
+                }}
+              >
+                <span style={{ opacity: 0.7 }}>⚠</span>
                 {session.error}
               </div>
             )}
 
-            {/* Game view — scene or encounter */}
+            {/* ── Narrative — always the centrepiece ── */}
+            <NarrativePanel
+              narrative={session.narrative}
+              prompt={session.prompt}
+              narrating={session.narrating}
+            />
+
+            {/* ── Mode-specific game view ── */}
             {session.state.runtime.mode === 'encounter' ? (
               <EncounterView
                 state={session.state}
@@ -60,13 +135,6 @@ export default function Home() {
                 onDispatch={dispatch}
               />
             )}
-
-            {/* Narrative panel */}
-            <NarrativePanel
-              narrative={session.narrative}
-              prompt={session.prompt}
-              narrating={session.narrating}
-            />
           </>
         )}
       </main>

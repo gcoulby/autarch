@@ -1,1 +1,186 @@
 @import "@autarch/tailwind-config/styles";
+
+/* ── Autarch RPG dark theme ──────────────────────────────────────────────────
+   Overrides the shadcn dark-mode variables with a warm, torchlit palette.
+   All game components rely on these vars so the whole UI is cohesive.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.dark {
+  --background:          oklch(0.10 0.014 68);   /* near-black, warm tint    */
+  --foreground:          oklch(0.86 0.027 76);   /* cream text               */
+
+  --card:                oklch(0.13 0.012 68);   /* card surface             */
+  --card-foreground:     oklch(0.86 0.027 76);
+
+  --popover:             oklch(0.15 0.013 68);
+  --popover-foreground:  oklch(0.86 0.027 76);
+
+  --primary:             oklch(0.70 0.148 68);   /* amber — "torchlight"     */
+  --primary-foreground:  oklch(0.10 0.014 68);
+
+  --secondary:           oklch(0.18 0.012 68);
+  --secondary-foreground: oklch(0.86 0.027 76);
+
+  --muted:               oklch(0.18 0.012 68);
+  --muted-foreground:    oklch(0.54 0.022 76);   /* warm gray                */
+
+  --accent:              oklch(0.22 0.015 68);
+  --accent-foreground:   oklch(0.86 0.027 76);
+
+  --destructive:         oklch(0.42 0.155 22);
+  --destructive-foreground: oklch(0.86 0.027 76);
+
+  --border:              oklch(0.23 0.018 68);
+  --input:               oklch(0.18 0.012 68);
+  --ring:                oklch(0.70 0.148 68);
+}
+
+/* ── Game-specific design tokens ─────────────────────────────────────────── */
+
+:root {
+  /* Action colours */
+  --game-amber:      #d4a520;
+  --game-amber-bg:   #1f1608;
+  --game-amber-ring: #3d2d08;
+
+  --game-oracle:     #9068be;
+  --game-oracle-bg:  #160d22;
+  --game-oracle-ring:#2e1850;
+
+  --game-danger:     #c03030;
+  --game-danger-bg:  #1a0808;
+  --game-danger-ring:#3d1010;
+
+  --game-safe:       #3daa6a;
+  --game-safe-bg:    #081a10;
+  --game-safe-ring:  #0f3320;
+
+  --game-travel:     #2a9fa5;
+  --game-travel-bg:  #071518;
+  --game-travel-ring:#0e2d30;
+
+  /* Surface layers */
+  --game-surface:    oklch(0.13 0.012 68);
+  --game-surface-2:  oklch(0.17 0.014 68);
+  --game-surface-3:  oklch(0.20 0.015 68);
+  --game-border:     oklch(0.23 0.018 68);
+  --game-border-warm:oklch(0.30 0.030 68);
+}
+
+/* ── Typography ──────────────────────────────────────────────────────────── */
+
+@layer base {
+  body {
+    font-feature-settings: "kern" 1, "liga" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Prose-quality narrative text */
+  .narrative-text {
+    font-size: 1rem;
+    line-height: 1.8;
+    letter-spacing: 0.01em;
+    color: oklch(0.88 0.025 78);
+  }
+}
+
+/* ── Chaos meter ─────────────────────────────────────────────────────────── */
+
+.chaos-pip {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--game-amber);
+  opacity: 0.9;
+  box-shadow: 0 0 4px var(--game-amber);
+}
+
+.chaos-pip-empty {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid oklch(0.35 0.018 68);
+}
+
+/* ── Action button variants ──────────────────────────────────────────────── */
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.action-btn:active {
+  transform: scale(0.97);
+}
+
+.action-btn-player {
+  background: var(--game-amber-bg);
+  color: var(--game-amber);
+  border-color: var(--game-amber-ring);
+}
+.action-btn-player:hover {
+  background: oklch(0.22 0.04 68);
+  border-color: var(--game-amber);
+}
+
+.action-btn-travel {
+  background: var(--game-travel-bg);
+  color: var(--game-travel);
+  border-color: var(--game-travel-ring);
+}
+.action-btn-travel:hover {
+  background: oklch(0.14 0.025 198);
+  border-color: var(--game-travel);
+}
+
+.action-btn-oracle {
+  background: var(--game-oracle-bg);
+  color: var(--game-oracle);
+  border-color: var(--game-oracle-ring);
+}
+.action-btn-oracle:hover {
+  background: oklch(0.14 0.04 290);
+  border-color: var(--game-oracle);
+}
+
+.action-btn-safe {
+  background: var(--game-safe-bg);
+  color: var(--game-safe);
+  border-color: var(--game-safe-ring);
+}
+.action-btn-safe:hover {
+  background: oklch(0.14 0.04 150);
+  border-color: var(--game-safe);
+}
+
+.action-btn-danger {
+  background: var(--game-danger-bg);
+  color: var(--game-danger);
+  border-color: var(--game-danger-ring);
+}
+.action-btn-danger:hover {
+  background: oklch(0.14 0.04 22);
+  border-color: var(--game-danger);
+}
+
+.action-btn-system {
+  background: transparent;
+  color: oklch(0.54 0.022 76);
+  border-color: oklch(0.23 0.018 68);
+}
+.action-btn-system:hover {
+  color: oklch(0.72 0.022 76);
+  border-color: oklch(0.35 0.018 68);
+}

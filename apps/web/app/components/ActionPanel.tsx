@@ -3,25 +3,62 @@
 import { useState } from 'react'
 import type { ActionDescriptor } from '@autarch/engine'
 import type { Command } from '@autarch/runtime'
-import { Button } from '@autarch/ui/components/ui/button'
-import { Input } from '@autarch/ui/components/ui/input'
-import { Badge } from '@autarch/ui/components/ui/badge'
-
-const KIND_COLOURS: Record<string, string> = {
-  player: 'bg-blue-700 hover:bg-blue-600',
-  system: 'bg-zinc-600 hover:bg-zinc-500',
-  ai: 'bg-red-800 hover:bg-red-700',
-}
 
 const LIKELIHOOD_OPTIONS = [
-  'certain',
-  'nearly-certain',
-  'likely',
-  'fifty-fifty',
-  'unlikely',
-  'nearly-impossible',
-  'impossible',
+  { value: 'certain',          label: 'Certain' },
+  { value: 'nearly-certain',   label: 'Nearly Certain' },
+  { value: 'likely',           label: 'Likely' },
+  { value: 'fifty-fifty',      label: 'Fifty-Fifty' },
+  { value: 'unlikely',         label: 'Unlikely' },
+  { value: 'nearly-impossible',label: 'Nearly Impossible' },
+  { value: 'impossible',       label: 'Impossible' },
 ] as const
+
+function getButtonClass(actionId: string): string {
+  if (actionId === 'travel') return 'action-btn action-btn-travel'
+  if (actionId === 'rest')   return 'action-btn action-btn-safe'
+  return 'action-btn action-btn-player'
+}
+
+function getButtonPrefix(actionId: string): string {
+  if (actionId === 'travel')   return '→'
+  if (actionId === 'rest')     return '⊕'
+  if (actionId === 'search')   return '◎'
+  if (actionId === 'interact') return '◈'
+  if (actionId === 'attack')   return '✦'
+  if (actionId === 'move')     return '↗'
+  if (actionId === 'end-turn') return '⏎'
+  if (actionId === 'advance')  return '▶'
+  return '·'
+}
+
+interface InlineFormProps {
+  onCancel: () => void
+  children: React.ReactNode
+  title: string
+  accentVar: string
+}
+
+function InlineForm({ onCancel, children, title, accentVar }: InlineFormProps) {
+  return (
+    <div
+      className="rounded-lg p-4 space-y-3"
+      style={{
+        background: 'var(--game-surface)',
+        border: `1px solid ${accentVar}`,
+        boxShadow: `0 0 20px color-mix(in oklch, ${accentVar} 15%, transparent)`,
+      }}
+    >
+      <p className="text-xs font-semibold tracking-wide" style={{ color: accentVar }}>
+        {title}
+      </p>
+      {children}
+      <button className="action-btn action-btn-system text-xs mt-1" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  )
+}
 
 interface Props {
   actions: ActionDescriptor[]
@@ -29,20 +66,24 @@ interface Props {
 }
 
 export function ActionPanel({ actions, onDispatch }: Props) {
-  // Extra inputs for ask-oracle
   const [oracleOpen, setOracleOpen] = useState(false)
   const [oracleQuestion, setOracleQuestion] = useState('')
-  const [oracleLikelihood, setOracleLikelihood] = useState<string>('fifty-fifty')
+  const [oracleLikelihood, setOracleLikelihood] = useState('fifty-fifty')
 
-  // Extra input for search
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchAspect, setSearchAspect] = useState('')
 
-  // Extra input for end-scene
   const [endSceneOpen, setEndSceneOpen] = useState(false)
 
-  if (actions.length === 0) {
-    return <p className="text-xs text-zinc-500 italic">No actions available</p>
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: 'var(--game-surface-2)',
+    border: '1px solid var(--game-border-warm)',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    fontSize: '0.8125rem',
+    color: 'oklch(0.80 0.022 76)',
+    outline: 'none',
   }
 
   const playerActions = actions.filter((a) => a.kind === 'player')
@@ -50,197 +91,169 @@ export function ActionPanel({ actions, onDispatch }: Props) {
 
   function handleAction(action: ActionDescriptor) {
     switch (action.id) {
-      case 'ask-oracle':
-        setOracleOpen(true)
-        return
-      case 'search':
-        setSearchOpen(true)
-        return
-      case 'end-scene':
-        setEndSceneOpen(true)
-        return
+      case 'ask-oracle': setOracleOpen(true); return
+      case 'search':     setSearchOpen(true);  return
+      case 'end-scene':  setEndSceneOpen(true); return
       default:
         onDispatch(action.command as Command)
     }
   }
 
+  const openForm = oracleOpen || searchOpen || endSceneOpen
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Player actions row */}
       {playerActions.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-widest text-zinc-400">Player actions</p>
-          <div className="flex flex-wrap gap-2">
-            {playerActions.map((a, i) => (
-              <Button
-                key={`${a.id}-${i}`}
-                size="sm"
-                className={`${KIND_COLOURS[a.kind] ?? KIND_COLOURS.system} text-white text-xs`}
-                onClick={() => handleAction(a)}
-              >
-                {a.label}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {playerActions.map((a, i) => (
+            <button
+              key={`${a.id}-${i}`}
+              className={getButtonClass(a.id)}
+              onClick={() => handleAction(a)}
+            >
+              <span style={{ opacity: 0.7 }}>{getButtonPrefix(a.id)}</span>
+              {a.label}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Ask oracle form */}
+      {/* Always-available meta actions */}
+      {!openForm && (
+        <div className="flex flex-wrap gap-2 pt-1" style={{ borderTop: '1px solid var(--game-border)' }}>
+          <button
+            className="action-btn action-btn-oracle"
+            onClick={() => setOracleOpen(true)}
+          >
+            <span style={{ opacity: 0.7 }}>◆</span> Ask Oracle
+          </button>
+          <button
+            className="action-btn action-btn-danger"
+            onClick={() => setEndSceneOpen(true)}
+          >
+            <span style={{ opacity: 0.7 }}>◀</span> End Scene
+          </button>
+        </div>
+      )}
+
+      {/* Oracle form */}
       {oracleOpen && (
-        <div className="rounded border border-zinc-700 p-3 space-y-2 bg-zinc-900">
-          <p className="text-xs font-semibold text-zinc-300">Ask the Oracle</p>
-          <Input
-            placeholder="Question…"
+        <InlineForm
+          title="◆ Oracle — ask the fates"
+          accentVar="var(--game-oracle)"
+          onCancel={() => setOracleOpen(false)}
+        >
+          <input
+            style={inputStyle}
+            placeholder="What do you ask the oracle?"
             value={oracleQuestion}
             onChange={(e) => setOracleQuestion(e.target.value)}
-            className="h-7 text-xs bg-zinc-800 border-zinc-700"
-          />
-          <select
-            value={oracleLikelihood}
-            onChange={(e) => setOracleLikelihood(e.target.value)}
-            className="w-full rounded border border-zinc-700 bg-zinc-800 text-xs text-zinc-200 px-2 py-1"
-          >
-            {LIKELIHOOD_OPTIONS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="bg-blue-700 hover:bg-blue-600 text-white text-xs"
-              onClick={() => {
-                if (!oracleQuestion.trim()) return
-                onDispatch({
-                  type: 'AskOracle',
-                  question: oracleQuestion.trim(),
-                  likelihood: oracleLikelihood as any,
-                })
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && oracleQuestion.trim()) {
+                onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood as any })
                 setOracleOpen(false)
                 setOracleQuestion('')
                 setOracleLikelihood('fifty-fifty')
-              }}
-            >
-              Ask
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs"
-              onClick={() => setOracleOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
+              }
+            }}
+            autoFocus
+          />
+          <select
+            style={{ ...inputStyle, cursor: 'pointer' }}
+            value={oracleLikelihood}
+            onChange={(e) => setOracleLikelihood(e.target.value)}
+          >
+            {LIKELIHOOD_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            className="action-btn action-btn-oracle"
+            onClick={() => {
+              if (!oracleQuestion.trim()) return
+              onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood as any })
+              setOracleOpen(false)
+              setOracleQuestion('')
+              setOracleLikelihood('fifty-fifty')
+            }}
+          >
+            Ask the fates
+          </button>
+        </InlineForm>
       )}
 
       {/* Search form */}
       {searchOpen && (
-        <div className="rounded border border-zinc-700 p-3 space-y-2 bg-zinc-900">
-          <p className="text-xs font-semibold text-zinc-300">Search</p>
-          <Input
-            placeholder="What are you looking for? (aspect name)"
+        <InlineForm
+          title="◎ Search — what are you looking for?"
+          accentVar="var(--game-amber)"
+          onCancel={() => setSearchOpen(false)}
+        >
+          <input
+            style={inputStyle}
+            placeholder="Aspect name (e.g. Hidden passage)"
             value={searchAspect}
             onChange={(e) => setSearchAspect(e.target.value)}
-            className="h-7 text-xs bg-zinc-800 border-zinc-700"
-          />
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="bg-blue-700 hover:bg-blue-600 text-white text-xs"
-              onClick={() => {
-                if (!searchAspect.trim()) return
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchAspect.trim()) {
                 onDispatch({ type: 'Search', aspectName: searchAspect.trim() })
                 setSearchOpen(false)
                 setSearchAspect('')
-              }}
-            >
-              Search
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs"
-              onClick={() => setSearchOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
+              }
+            }}
+            autoFocus
+          />
+          <button
+            className="action-btn action-btn-player"
+            onClick={() => {
+              if (!searchAspect.trim()) return
+              onDispatch({ type: 'Search', aspectName: searchAspect.trim() })
+              setSearchOpen(false)
+              setSearchAspect('')
+            }}
+          >
+            Search
+          </button>
+        </InlineForm>
       )}
 
       {/* End-scene form */}
       {endSceneOpen && (
-        <div className="rounded border border-zinc-700 p-3 space-y-2 bg-zinc-900">
-          <p className="text-xs font-semibold text-zinc-300">End scene</p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="bg-green-700 hover:bg-green-600 text-white text-xs"
-              onClick={() => {
-                onDispatch({ type: 'EndScene', result: 'success' })
-                setEndSceneOpen(false)
-              }}
+        <InlineForm
+          title="◀ End Scene — how did it resolve?"
+          accentVar="var(--game-danger)"
+          onCancel={() => setEndSceneOpen(false)}
+        >
+          <div className="flex gap-3">
+            <button
+              className="action-btn action-btn-safe"
+              onClick={() => { onDispatch({ type: 'EndScene', result: 'success' }); setEndSceneOpen(false) }}
             >
-              Success
-            </Button>
-            <Button
-              size="sm"
-              className="bg-red-800 hover:bg-red-700 text-white text-xs"
-              onClick={() => {
-                onDispatch({ type: 'EndScene', result: 'failure' })
-                setEndSceneOpen(false)
-              }}
+              ✓ Success
+            </button>
+            <button
+              className="action-btn action-btn-danger"
+              onClick={() => { onDispatch({ type: 'EndScene', result: 'failure' }); setEndSceneOpen(false) }}
             >
-              Failure
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs"
-              onClick={() => setEndSceneOpen(false)}
-            >
-              Cancel
-            </Button>
+              ✗ Failure
+            </button>
           </div>
-        </div>
+        </InlineForm>
       )}
 
-      {/* Oracle & end-scene triggers (shown alongside player actions) */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          className="bg-purple-800 hover:bg-purple-700 text-white text-xs"
-          onClick={() => setOracleOpen(true)}
-        >
-          Ask Oracle
-        </Button>
-        <Button
-          size="sm"
-          className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs"
-          onClick={() => setEndSceneOpen(true)}
-        >
-          End Scene
-        </Button>
-      </div>
-
+      {/* System actions — de-emphasized */}
       {systemActions.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-widest text-zinc-500">System</p>
-          <div className="flex flex-wrap gap-2">
-            {systemActions.map((a, i) => (
-              <Button
-                key={`${a.id}-${i}`}
-                size="sm"
-                variant="outline"
-                className="text-xs border-zinc-700 text-zinc-400 hover:text-zinc-200"
-                onClick={() => handleAction(a)}
-              >
-                {a.label}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {systemActions.map((a, i) => (
+            <button
+              key={`${a.id}-${i}`}
+              className="action-btn action-btn-system"
+              onClick={() => handleAction(a)}
+            >
+              {a.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

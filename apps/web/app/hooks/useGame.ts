@@ -5,7 +5,7 @@ import type { GameState } from '@autarch/engine'
 import { getValidActions } from '@autarch/engine'
 import type { ActionDescriptor } from '@autarch/engine'
 import type { Command } from '@autarch/runtime'
-import { orchestrator, makeNarrativeService } from '../lib/game'
+import { orchestrator, makeNarrativeService, ENV_LLM_URL } from '../lib/game'
 
 export interface GameSession {
   gameId: string
@@ -19,55 +19,43 @@ export interface GameSession {
 
 export function useGame() {
   const [session, setSession] = useState<GameSession | null>(null)
-  const [llmUrl, setLlmUrl] = useState<string>('')
-  const narrativeSvcRef = useRef(makeNarrativeService(undefined))
+  const [llmUrl, setLlmUrl] = useState<string>(ENV_LLM_URL)
+  const narrativeSvcRef = useRef(makeNarrativeService(ENV_LLM_URL || undefined))
 
-  // Re-create narrative service when URL changes
   const applyLlmUrl = useCallback((url: string) => {
     setLlmUrl(url)
     narrativeSvcRef.current = makeNarrativeService(url.trim() || undefined)
   }, [])
 
-  const refreshState = useCallback(
-    async (gameId: string, doNarrate = true): Promise<void> => {
-      const state = await orchestrator.loadState(gameId)
-      if (!state) return
+  const refreshState = useCallback(async (gameId: string, doNarrate = true): Promise<void> => {
+    const state = await orchestrator.loadState(gameId)
+    if (!state) return
 
-      const actions = getValidActions(state)
+    const actions = getValidActions(state)
 
-      setSession((prev) => ({
-        gameId,
-        state,
-        actions,
-        narrative: prev?.narrative ?? '',
-        prompt: prev?.prompt ?? '',
-        narrating: doNarrate,
-        error: null,
-      }))
+    setSession((prev) => ({
+      gameId,
+      state,
+      actions,
+      narrative: prev?.narrative ?? '',
+      prompt: prev?.prompt ?? '',
+      narrating: doNarrate,
+      error: null,
+    }))
 
-      if (doNarrate) {
-        try {
-          const { narrative, prompt } = await narrativeSvcRef.current.narrate(gameId)
-          setSession((prev) =>
-            prev ? { ...prev, narrative, prompt, narrating: false } : prev,
-          )
-        } catch (e) {
-          setSession((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  narrative: '',
-                  prompt: '',
-                  narrating: false,
-                  error: e instanceof Error ? e.message : String(e),
-                }
-              : prev,
-          )
-        }
+    if (doNarrate) {
+      try {
+        const { narrative, prompt } = await narrativeSvcRef.current.narrate(gameId)
+        setSession((prev) => (prev ? { ...prev, narrative, prompt, narrating: false } : prev))
+      } catch (e) {
+        setSession((prev) =>
+          prev
+            ? { ...prev, narrating: false, error: e instanceof Error ? e.message : String(e) }
+            : prev,
+        )
       }
-    },
-    [],
-  )
+    }
+  }, [])
 
   const createGame = useCallback(async () => {
     const gameId = crypto.randomUUID()
