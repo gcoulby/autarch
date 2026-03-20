@@ -1,135 +1,156 @@
-# Turborepo starter
+# Autarch
 
-This Turborepo starter is maintained by the Turborepo core team.
+> **⚠ EXPERIMENT — READ THIS FIRST**
+>
+> This project was built as an experiment in using LLMs and agentic coding tools (Claude Code) to design and implement a non-trivial software system from scratch. The architecture, engine, test suite, persistence layer, LLM integration, and web UI were all produced through iterative prompting sessions — not written by hand.
+>
+> The codebase is in active development and has known gaps. It is shared as a record of what that process produces, not as a polished product. If something is broken, that is probably why.
 
-## Using this example
+---
 
-Run the following command:
+A deterministic, event-sourced game engine for solo / GM-free tabletop RPGs, built on the [Fate](https://fate-srd.com/) system. The goal is a Divinity: Original Sin / Baldur's Gate style experience — open world scene exploration transitioning into structured turn-based combat — running entirely locally with a local LLM generating the narrative and no human GM required.
 
-```sh
-npx create-turbo@latest
+The player controls their character. Everything else is driven by the engine, rule-based AI, and the local model.
+
+---
+
+## Running it
+
+```bash
+docker-compose up -d --build
 ```
 
-## What's inside?
+Then open [http://localhost:3000](http://localhost:3000).
 
-This Turborepo includes the following packages/apps:
+That single command starts:
 
-### Apps and Packages
+| Service | What it does |
+|---|---|
+| `web` | Next.js game UI on port 3000 |
+| `ollama` | Local LLM server on port 11434 |
+| `ollama-init` | Pulls the default model (`mistral`) on first run |
+| `mongo` | MongoDB on port 27017 (persistence, not yet wired into the app) |
+| `neo4j` | Neo4j on port 7474 / 7687 (knowledge graph, not yet wired in) |
+| `qdrant` | Qdrant vector store on port 6333 (narrative memory, not yet wired in) |
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@autarch/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@autarch/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@autarch/typescript-config`: `tsconfig.json`s used throughout the monorepo
+The first run will take a few minutes while Ollama downloads the model. Subsequent starts are fast.
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+### Changing the model
 
-### Utilities
+Edit `.env` (copy from `.env.example`):
 
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```bash
+OLLAMA_MODEL=llama3.2:3b   # faster, lighter
+# OLLAMA_MODEL=phi3:mini   # very fast, ~2 GB
+# OLLAMA_MODEL=mistral     # default, better quality, ~4 GB
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Then restart:
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+```bash
+docker-compose up -d --build
 ```
 
-### Develop
+### GPU acceleration (NVIDIA)
 
-To develop all apps and packages, run the following command:
+Uncomment the `deploy` block in `docker-compose.yml` under the `ollama` service:
 
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### Without Docker
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+```bash
+pnpm install
+pnpm --filter @autarch/engine build
+pnpm --filter web dev
 ```
 
-### Remote Caching
+You will need to point the app at an LLM server manually. Set `NEXT_PUBLIC_LLM_URL` to any OpenAI-compatible endpoint — GPT4All, LM Studio, Ollama running locally, llama.cpp server, etc. If the variable is not set, the app uses a stub that returns placeholder text so the engine still runs.
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+---
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## What it does
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+The engine is a fully deterministic, event-sourced rules kernel. Every game action produces events, events are stored in a log, and state is always derived by replaying that log. This means any game session is perfectly reproducible given its initial seed.
+
+The LLM only ever narrates — it reads the context model and produces prose. It never decides what happens. The engine decides; the model describes it.
+
+### Scene mode
+
+The player explores a location graph. Each location has aspects (descriptive Fate-style phrases), connected exits, and potentially NPCs. Available actions: travel to connected locations, rest (restores stress), search (discovers a new aspect), interact with NPCs, or ask the oracle.
+
+### The oracle
+
+The solo RPG oracle answers yes/no questions using the Fate chaos mechanic. The player asks a question and sets a likelihood. The engine rolls 2d6 with seeded RNG, applies the chaos modifier, and resolves to one of: exceptional-yes, yes-and, yes, no-but, no, exceptional-no. The chaos factor increases when scenes go badly and decreases when they go well, so higher chaos means more unpredictable and dramatic outcomes. If both dice show the same face and that value is at or below the chaos factor, a random event fires alongside the answer.
+
+The engine decides the result. The LLM narrates it.
+
+### Encounter / combat
+
+Zone-based turn-order combat using Fate dice (4dF). The player's character and enemies take turns. Enemies are driven by a rule-based AI: move toward the closest opponent via BFS, attack if in the same zone, end turn otherwise. Attacks roll 4dF + Fight skill vs 4dF + Athletics skill; the difference in shifts is applied as stress. Stress at or above max stress defeats the entity.
+
+### Chaos factor
+
+Starts at 5. Decreases (min 1) when the player wins an encounter or ends a scene successfully. Increases (max 9) on loss or failure. Affects oracle odds throughout.
+
+---
+
+## Architecture
 
 ```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
+apps/web          Next.js UI — dispatches commands, renders state
+packages/runtime  Orchestrator — the only path to mutate game state
+packages/engine   Rules kernel — reducer (pure), RNG, oracle, valid-actions, AI
+packages/persistence  EventStore / StateStore (memory now, MongoDB stubs ready)
+packages/knowledge-graph  World graph (memory now, Neo4j interface ready)
+packages/vector-store     Narrative store (memory now, Qdrant interface ready)
+packages/context  ContextModelService — assembles LLM prompts, read-only
+packages/llm      NarrativeService, GPT4AllClient, StubLLMClient
+packages/ui       shadcn/ui component library
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+The engine is the sole arbiter of what is and is not a legal action. Nothing bypasses `Orchestrator.dispatch()`. The LLM has no write access to anything.
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+---
 
+## Development
+
+```bash
+pnpm install
+
+# Run all tests
+pnpm test:run
+
+# Watch mode
+pnpm test:watch
+
+# After changing packages/engine source, rebuild before tests pick it up
+pnpm --filter @autarch/engine build
 ```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
+The codebase is test-driven. Tests live in `packages/engine/tests/` and `packages/runtime/tests/`, organised by milestone. Every mechanic has coverage. Do not ship mechanics without tests.
 
-## Useful Links
+---
 
-Learn more about the power of Turborepo:
+## Stack
 
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- **Monorepo**: Turborepo + PNPM workspaces
+- **Language**: TypeScript strict, ESM throughout
+- **Tests**: Vitest
+- **UI**: Next.js, Tailwind, shadcn/ui
+- **LLM**: Any OpenAI-compatible local server (default: Ollama + Mistral)
+- **Persistence**: MongoDB (stubbed), Neo4j (stubbed), Qdrant (stubbed) — all currently in-memory
+
+---
+
+## Known gaps
+
+The web UI is functional but incomplete. There is no character creation or world setup flow — the game starts in an empty state and requires manual engine commands to populate a character and starting location. Oracle likelihood values in the UI are currently mismatched against the engine types. Narrative history is not preserved across actions. These are documented in `CLAUDE.md` for the next development session.
