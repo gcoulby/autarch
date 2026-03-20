@@ -12,8 +12,13 @@ const SYSTEM_PREAMBLE = [
  *
  * The prompt is intentionally compact — the context model does the heavy
  * lifting so the model narrates rather than reasons.
+ *
+ * @param triggerEvent - A specific event description to focus the narration.
+ *   When provided, the final directive becomes "NARRATE THIS EVENT: <event>"
+ *   rather than the generic "Narrate the current moment". This dramatically
+ *   reduces model wandering and generation length.
  */
-export function toPrompt(model: ContextModel): string {
+export function toPrompt(model: ContextModel, triggerEvent?: string): string {
   const lines: string[] = []
 
   lines.push(SYSTEM_PREAMBLE)
@@ -92,7 +97,11 @@ export function toPrompt(model: ContextModel): string {
   }
 
   lines.push('')
-  lines.push('Narrate the current moment:')
+  if (triggerEvent) {
+    lines.push(`NARRATE THIS EVENT: ${triggerEvent}`)
+  } else {
+    lines.push('Narrate the current moment:')
+  }
 
   return lines.join('\n')
 }

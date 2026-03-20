@@ -10,6 +10,13 @@ export interface NarrateOptions extends BuildOptions {
    * Default: true
    */
   storeNarrative?: boolean
+  /**
+   * A human-readable description of the specific event that triggered narration.
+   * When set, the prompt ends with "NARRATE THIS EVENT: <triggerEvent>" instead
+   * of the generic "Narrate the current moment". This keeps the model focused on
+   * what actually happened rather than re-describing the whole scene.
+   */
+  triggerEvent?: string
 }
 
 export interface NarrateResult {
@@ -38,11 +45,11 @@ export class NarrativeService {
   ) {}
 
   async narrate(gameId: string, options: NarrateOptions = {}): Promise<NarrateResult> {
-    const { storeNarrative = true, ...buildOptions } = options
+    const { storeNarrative = true, triggerEvent, ...buildOptions } = options
 
     // 1 + 2 — Build context and serialise to prompt
     const model = await this.contextService.build(gameId, buildOptions)
-    const prompt = toPrompt(model)
+    const prompt = toPrompt(model, triggerEvent)
 
     // 3 — Generate narrative
     const narrative = await this.llmClient.complete(prompt)

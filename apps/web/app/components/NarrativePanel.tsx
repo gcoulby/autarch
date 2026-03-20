@@ -1,15 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { NarrativeEntry } from '../hooks/useGame'
 
 interface Props {
-  narrative: string
+  entries: NarrativeEntry[]
   prompt: string
   narrating: boolean
 }
 
-export function NarrativePanel({ narrative, prompt, narrating }: Props) {
+export function NarrativePanel({ entries, prompt, narrating }: Props) {
   const [showPrompt, setShowPrompt] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when new entries arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [entries.length, narrating])
 
   return (
     <div
@@ -43,10 +52,33 @@ export function NarrativePanel({ narrative, prompt, narrating }: Props) {
         )}
       </div>
 
-      {/* Narrative body */}
-      <div className="px-6 py-5 min-h-24">
-        {narrating ? (
-          <div className="flex items-center gap-2">
+      {/* Scrollable entry list */}
+      <div
+        ref={scrollRef}
+        className="px-6 py-4 space-y-5 overflow-y-auto"
+        style={{ maxHeight: '28rem', minHeight: '7rem' }}
+      >
+        {entries.length === 0 && !narrating ? (
+          <p style={{ color: 'oklch(0.40 0.018 68)', fontStyle: 'italic', fontSize: '0.875rem' }}>
+            No narrative yet. Dispatch an action to begin.
+          </p>
+        ) : (
+          entries.map((entry, i) => (
+            <div key={i} className="space-y-1">
+              <p className="narrative-text whitespace-pre-wrap">{entry.text}</p>
+              <p
+                className="text-[10px] tracking-wide"
+                style={{ color: 'oklch(0.35 0.015 68)' }}
+              >
+                {entry.eventType} · {new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          ))
+        )}
+
+        {/* Typing indicator at the bottom when narrating */}
+        {narrating && (
+          <div className="flex items-center gap-2 pt-1">
             <span
               className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
               style={{ background: 'var(--game-amber)' }}
@@ -60,14 +92,6 @@ export function NarrativePanel({ narrative, prompt, narrating }: Props) {
               style={{ background: 'var(--game-amber)', animationDelay: '0.4s' }}
             />
           </div>
-        ) : (
-          <p className="narrative-text whitespace-pre-wrap">
-            {narrative || (
-              <span style={{ color: 'oklch(0.40 0.018 68)', fontStyle: 'italic' }}>
-                No narrative yet. Dispatch an action to begin.
-              </span>
-            )}
-          </p>
         )}
       </div>
 
@@ -78,7 +102,7 @@ export function NarrativePanel({ narrative, prompt, narrating }: Props) {
           style={{ borderTop: '1px solid var(--game-border)' }}
         >
           <p className="text-[10px] uppercase tracking-widest mb-2 mt-3" style={{ color: 'oklch(0.40 0.018 68)' }}>
-            LLM Prompt
+            LLM Prompt (last)
           </p>
           <pre
             className="text-[10px] font-mono leading-relaxed overflow-y-auto max-h-40 whitespace-pre-wrap"

@@ -2,17 +2,16 @@
 
 import { useState } from 'react'
 import type { ActionDescriptor } from '@autarch/engine'
+import type { OracleLikelihood } from '@autarch/engine'
 import type { Command } from '@autarch/runtime'
 
-const LIKELIHOOD_OPTIONS = [
-  { value: 'certain',          label: 'Certain' },
-  { value: 'nearly-certain',   label: 'Nearly Certain' },
-  { value: 'likely',           label: 'Likely' },
-  { value: 'fifty-fifty',      label: 'Fifty-Fifty' },
-  { value: 'unlikely',         label: 'Unlikely' },
-  { value: 'nearly-impossible',label: 'Nearly Impossible' },
-  { value: 'impossible',       label: 'Impossible' },
-] as const
+const LIKELIHOOD_OPTIONS: { value: OracleLikelihood; label: string }[] = [
+  { value: 'very-likely',   label: 'Very Likely' },
+  { value: 'likely',        label: 'Likely' },
+  { value: '50-50',         label: '50/50' },
+  { value: 'unlikely',      label: 'Unlikely' },
+  { value: 'very-unlikely', label: 'Very Unlikely' },
+]
 
 function getButtonClass(actionId: string): string {
   if (actionId === 'travel') return 'action-btn action-btn-travel'
@@ -68,7 +67,7 @@ interface Props {
 export function ActionPanel({ actions, onDispatch }: Props) {
   const [oracleOpen, setOracleOpen] = useState(false)
   const [oracleQuestion, setOracleQuestion] = useState('')
-  const [oracleLikelihood, setOracleLikelihood] = useState('fifty-fifty')
+  const [oracleLikelihood, setOracleLikelihood] = useState<OracleLikelihood>('50-50')
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchAspect, setSearchAspect] = useState('')
@@ -151,10 +150,10 @@ export function ActionPanel({ actions, onDispatch }: Props) {
             onChange={(e) => setOracleQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && oracleQuestion.trim()) {
-                onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood as any })
+                onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood })
                 setOracleOpen(false)
                 setOracleQuestion('')
-                setOracleLikelihood('fifty-fifty')
+                setOracleLikelihood('50-50')
               }
             }}
             autoFocus
@@ -162,7 +161,7 @@ export function ActionPanel({ actions, onDispatch }: Props) {
           <select
             style={{ ...inputStyle, cursor: 'pointer' }}
             value={oracleLikelihood}
-            onChange={(e) => setOracleLikelihood(e.target.value)}
+            onChange={(e) => setOracleLikelihood(e.target.value as OracleLikelihood)}
           >
             {LIKELIHOOD_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -172,10 +171,10 @@ export function ActionPanel({ actions, onDispatch }: Props) {
             className="action-btn action-btn-oracle"
             onClick={() => {
               if (!oracleQuestion.trim()) return
-              onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood as any })
+              onDispatch({ type: 'AskOracle', question: oracleQuestion.trim(), likelihood: oracleLikelihood })
               setOracleOpen(false)
               setOracleQuestion('')
-              setOracleLikelihood('fifty-fifty')
+              setOracleLikelihood('50-50')
             }}
           >
             Ask the fates

@@ -1,512 +1,433 @@
 # CLAUDE.md — Autarch Project
 
-This file is the authoritative context document for Claude Code. Read it fully before making any changes. Do not skip sections.
+Read this fully before touching anything. Do not skim.
 
 ---
 
 ## What This Project Is
 
-Autarch is a **deterministic, event-sourced game engine for solo/GM-free tabletop RPGs**. The goal is a game that plays like Divinity: Original Sin or Baldur's Gate -- open world exploration in scene mode, then structured turn-based combat in encounter mode -- but running locally with AI-generated narrative and no human GM required.
+Autarch is a deterministic, event-sourced game engine for solo/GM-free tabletop RPGs. The target experience is Divinity: Original Sin or Baldur's Gate — open world scene exploration transitioning into structured turn-based combat — running locally with AI-generated narrative and no human GM.
 
-The player controls their character. Everything else is driven by the engine, AI agents, and local LLMs.
+The player controls their character. Everything else is driven by the engine, rule-based AI, and a local LLM for narration only.
 
-This is not a vibe-coded prototype. The codebase is test-driven and must stay that way. Every mechanic gets tests before or alongside implementation.
+This is a test-driven codebase. Every mechanic gets tests before or alongside implementation.
 
 ---
 
-## Repository Structure
-
-Turborepo monorepo using PNPM workspaces.
+## Actual Repository Structure
 
 ```
 autarch/
   packages/
-    engine/          # Core game engine — the rules kernel (PRIMARY PACKAGE)
-    ui/              # Stub only — not in active development
-    eslint-config/   # Shared lint config
-    typescript-config/  # Shared tsconfig
+    engine/           # Types, domain (reducer, replay, invariants, RNG, oracle), valid-actions, basic-ai
+    runtime/          # Orchestrator — dispatches commands, creates events
+    persistence/      # IEventStore / IStateStore interfaces + MemoryEventStore, MemoryStateStore, MongoDB stubs
+    knowledge-graph/  # IWorldGraph interface + MemoryWorldGraph
+    vector-store/     # INarrativeStore interface + MemoryVectorStore
+    context/          # ContextModelService (M8) — assembles prompts from all four data sources
+    llm/              # NarrativeService (M9), GPT4AllClient, StubLLMClient
+    ui/               # shadcn/ui component library
+    tailwind-config/  # Shared design tokens and CSS variables
+    eslint-config/    # Shared lint config
+    typescript-config/
   apps/
-    web/             # Next.js app — exploration/combat UI (PLANNED, not yet built)
-    docs/            # Next.js stub — boilerplate, ignore
+    web/              # Next.js — the actual game UI (running, not a stub)
+    docs/             # Boilerplate — do not touch
 ```
 
-The `apps/docs` app is boilerplate. Do not touch it.
-
-The `apps/web` app is planned but mostly empty. It will become the primary game UI.
-
-The `packages/engine` package is the only package with real code. It is the rules kernel.
+The `apps/docs` directory is boilerplate. Do not touch it.
 
 ---
 
-## Architecture Overview
+## What Is Actually Built
 
-### The Three-Layer Model
-
-```
-┌─────────────────────────────────────────────────┐
-│                    apps/web                      │
-│         Next.js — exploration + combat UI        │
-│         Player input → Commands → Engine         │
-└────────────────────┬────────────────────────────┘
-                     │ Commands / State reads
-┌────────────────────▼────────────────────────────┐
-│              packages/engine                     │
-│         Rules kernel — the only source           │
-│         of truth for what is/isn't legal         │
-│    Orchestrator → EventStore → Reducer → State   │
-└────────────────────┬────────────────────────────┘
-                     │ Reads / Writes
-┌────────────────────▼────────────────────────────┐
-│              Data Layer (PLANNED)                │
-│  DocumentDB  │  KnowledgeGraph  │  VectorDB      │
-│  (game state │  (relationships, │  (narrative     │
-│   inventories│   world graph)   │   tone/memory)  │
-│   items etc) │                  │                 │
-└──────────────┴──────────────────┴────────────────┘
-                     │ Context
-┌────────────────────▼────────────────────────────┐
-│           Context Model Service (PLANNED)        │
-│   Reads all three stores + engine state          │
-│   Assembles a structured prompt payload          │
-│   LLM never sees raw data — only context model   │
-└────────────────────┬────────────────────────────┘
-                     │ Prompt / Response
-┌────────────────────▼────────────────────────────┐
-│           Local LLM (PLANNED)                    │
-│           GPT4All via REST API                   │
-│           Generates narrative text only          │
-│           Does not make game decisions           │
-└─────────────────────────────────────────────────┘
-```
-
-### Critical Boundaries
-
-- **The engine is the sole arbiter of legal actions.** No other layer can modify game state directly. Everything goes through `Orchestrator.dispatch()`.
-- **The LLM generates narrative only.** It does not decide what happens in the game. The engine decides. The LLM describes it.
-- **The context model service owns prompt assembly.** The LLM receives a structured context payload derived from all data sources. It does not query stores itself.
-- **The stores are read-only from the LLM's perspective.** All writes go through the engine or dedicated store services.
-
----
-
-## packages/engine — Current State
-
-### What Is Built (Milestones 1–3)
-
-**M1 — Authority**
-- `Orchestrator` class with `dispatch(gameId, command)` and `loadState(gameId)`
-- Event store and state store abstractions (`EventStore`, `StateStore`) — currently in-memory only
-- `applyEvent` reducer — pure function, no side effects
-- `replay(gameId, events)` — derives state from scratch from the event log
+### M1 — Authority (complete)
+- `Orchestrator.dispatch(gameId, command)` and `loadState(gameId)` in `packages/runtime`
+- `IEventStore` / `IStateStore` interfaces in `packages/persistence`, with `MemoryEventStore` and `MemoryStateStore`
+- `applyEvent(state, event)` — pure reducer, no side effects (`packages/engine/src/domain/reducer.ts`)
+- `replay(gameId, events)` — derives state from event log
 - `createInitialState` — canonical empty state factory
-- `InvariantError` and `assert` for guard clauses
-- Full test coverage: smoke, invariant violation, replay determinism, valid actions
+- `assert`, `requireEntity`, `InvariantError` in `domain/invariants.ts`
 
-**M2 — Combat**
+### M2 — Combat (complete)
 - Zone-based encounter map (`EncounterMap`, `Zone` with adjacency lists)
 - `Move` command — validates adjacency, emits `EntityMoved`
 - `Attack` command — melee only (same zone), flat 1 damage, emits `EntityDamaged`
 - Defeat condition: `stress >= maxStress` sets `status.alive = false`
-- `getValidActions(state)` — returns legal `ActionDescriptor[]` for current state
-- Full test coverage: move, attack, map replay, AI guard, AI behaviour
+- `getValidActions(state)` — returns legal `ActionDescriptor[]`
 
-**M3 — Advance**
-- `Advance` command — single entry point for system-driven state progression
-- Handles: initiative→turn transition, starting turns, running AI turns, encounter end detection
-- `EncounterEnded` event with `win` / `loss` result
-- `EncounterResult` is a no-op once in `resolution` phase
-- Basic AI (`basic-ai.ts`): rule-based (not LLM), attacks if in same zone, moves toward closest opponent via BFS otherwise, ends turn if nothing applicable
-- Full test coverage: advance variants, encounter ended win/loss, resolution no-op
+### M3 — Advance (complete)
+- `Advance` command — system-driven state progression
+- Handles initiative→turn transition, starting turns, running AI turns, encounter end detection
+- `EncounterEnded` event with `win`/`loss` result
+- Basic rule-based AI (`engine/src/engine/ai/basic-ai.ts`): BFS toward closest opponent, attack if in same zone, end turn otherwise
 
-### What Is Stubbed / Incomplete
+### M4 — Fate Mechanics (complete)
+- `rng.ts`: FNV-1a + Mulberry32 PRNG — `rollFateDice(seed, seq, count, prefix)` returns `RollResult[]`, `rollD6Pair()` for oracle
+- `Skill { id, name, rating }` and `Stunt { id, name, description, skillId? }` on `Entity.stats`
+- `Aspect.consequenceSeverity?: 'mild' | 'moderate' | 'severe'`
+- `GameState.meta.seed` — stored for orchestrator dice rolls
+- Event types: `RollMade`, `AspectInvoked`, `AspectCompelled`
+- Commands: `FateAttack` (4dF+Fight vs 4dF+Athletics, emits `RollMade` always, `EntityDamaged` on positive shifts), `InvokeAspect`, `CompelAspect`, `TakeConsequence`
+- Chaos factor: `EncounterEnded win` → `max(1, chaos-1)`, loss → `min(9, chaos+1)`
 
-- `chaos` field exists on `GameState.runtime` (default 5) but is never read or written — reserved for Fate chaos factor mechanics
-- `scene` and `downtime` modes exist in types but have no logic
-- `rng` field exists on `GameEvent` but is never populated — reserved for seeded dice rolls
-- `npc` and `summon` entity kinds exist in types but have no distinct behaviour
-- Storage is in-memory only — no persistence layer yet
+### M5 — Scene Mode (complete)
+- `Location { id, name, tags, aspects, connections }` and `SceneState { locationId, locations }`
+- `scene?: SceneState` on `GameState` — persists across mode switches
+- Event types: `SceneStarted`, `LocationAdded`, `LocationChanged`, `LocationAspectAdded`, `Rested`, `Interacted`, `SceneEnded`
+- Commands: `AddLocation`, `SetLocation` (setup teleport), `Travel` (validates connections), `Rest` (restores PC stress via EntityPatched), `Search` (adds discovered aspect with 1 free invoke), `Interact` (validates NPC at current location), `EndScene` (success/failure, updates chaos)
+- `getValidActions` extended for scene mode: travel per connection, rest, search, interact per NPC at current location
+- Entity `position.zoneId` doubles as locationId in scene mode — intentional
 
-### Key Types
+### M6 — AI Oracle (complete)
+- `domain/oracle.ts`: pure `resolveOracle(d1, d2, likelihood, chaos)` → `OracleResult`, `isRandomEvent(d1, d2, chaos)`
+- `OracleLikelihood`: `'very-likely' | 'likely' | '50-50' | 'unlikely' | 'very-unlikely'`
+- `OracleResult`: `'exceptional-yes' | 'yes-and' | 'yes' | 'no-but' | 'no' | 'exceptional-no'`
+- `AskOracle` command rolls 2d6 via seeded RNG, resolves deterministically, emits `OracleAnswered`
+- Random event fires alongside oracle answer when `die1 === die2 && die1 <= chaos`, emits `RandomEventTriggered`
+- Oracle result is in the event payload — the LLM narrates it, does not decide it
 
-```typescript
-// Game modes
-type GameMode = 'scene' | 'encounter' | 'downtime'
-type GamePhase = 'setup' | 'initiative' | 'turn' | 'resolution'
-type Side = 'players' | 'ai' | 'system'
+### M7 — Persistence (partially complete)
+- Interface layer in `packages/persistence/src/interfaces.ts` (`IEventStore`, `IStateStore`)
+- `MemoryEventStore` and `MemoryStateStore` — used everywhere currently
+- MongoDB stubs exist (`MongoEventStore`, `MongoStateStore`) but are not wired in and are untested at runtime
+- `MemoryWorldGraph` in `packages/knowledge-graph` — in-memory node/edge store, used in the web app
+- `MemoryVectorStore` in `packages/vector-store` — in-memory cosine-similarity store, used in the web app
 
-// Entity
-interface Entity {
-  id: string
-  kind: 'pc' | 'npc' | 'enemy' | 'summon'
-  name: string
-  status: { alive: boolean; conditions: string[] }
-  position?: { zoneId: string }
-  stats: {
-    stress: number
-    maxStress: number
-    aspects: { id: string; name: string; freeInvokes: number }[]
-    resources: Record<string, number>
-  }
-  tags: string[]
-}
+### M8 — Context Model Service (complete)
+- `packages/context/src/ContextModelService.ts` — assembles `ContextModel` from all four data sources
+- `packages/context/src/prompt.ts` — `toPrompt(model)` serialises to a compact prompt string
+- `packages/context/src/summarize.ts` — `summarizeEvent(event)` produces human-readable event summaries
+- The service is read-only. It never writes to any store.
 
-// Events emitted by the engine
-type GameEventType =
-  | 'GameCreated' | 'ModeSet' | 'PhaseSet'
-  | 'EntityAdded' | 'EntityPatched'
-  | 'InitiativeSet' | 'EncounterPointerSet'
-  | 'RoundStarted' | 'TurnStarted' | 'TurnEnded'
-  | 'ActiveEntitySet' | 'EncounterMapSet'
-  | 'EntityMoved' | 'EntityDamaged' | 'EncounterEnded'
+### M9 — LLM Integration (complete)
+- `packages/llm/src/NarrativeService.ts` — orchestrates: build context → serialise → call LLM → store narrative
+- `packages/llm/src/clients/GPT4AllClient.ts` — OpenAI-compatible REST client (works with GPT4All, LM Studio, Ollama, llama.cpp)
+- `packages/llm/src/clients/StubLLMClient.ts` — returns deterministic placeholder text, used when no LLM URL is configured
+- `ILLMClient` interface — swap implementations without touching the rest of the stack
 
-// Commands accepted by the Orchestrator
-type Command =
-  | { type: 'CreateGame'; schemaVersion: number; seed: string }
-  | { type: 'Advance' }
-  | { type: 'SetMode'; mode: GameMode }
-  | { type: 'SetPhase'; phase: GamePhase }
-  | { type: 'AddEntity'; entity: Entity }
-  | { type: 'SetInitiative'; order: string[] }
-  | { type: 'StartRound' } | { type: 'StartTurn' } | { type: 'EndTurn' }
-  | { type: 'SetEncounterMap'; map: EncounterMap }
-  | { type: 'Move'; entityId: string; toZoneId: string }
-  | { type: 'Attack'; attackerId: string; targetId: string }
+### M10 — Web App (substantially complete, but with known gaps — see below)
+- `apps/web/app/page.tsx` — main layout, top bar, mode routing
+- `apps/web/app/hooks/useGame.ts` — `useGame()` hook managing game session, dispatch, and narration
+- `apps/web/app/lib/game.ts` — singletons: `orchestrator`, `contextService`, `makeNarrativeService(url?)`
+- `apps/web/app/components/SceneView.tsx` — location card, NPC list, connections, character sidebar, known locations
+- `apps/web/app/components/EncounterView.tsx` — zone map with occupants, initiative tracker, combatant stress bars
+- `apps/web/app/components/NarrativePanel.tsx` — narrative display with loading state and prompt inspector
+- `apps/web/app/components/ActionPanel.tsx` — action buttons with inline forms for oracle, search, and end-scene
+- `apps/web/app/components/ChaosMeter.tsx` — chaos factor visualisation
+- `apps/web/app/components/LlmSettings.tsx` — LLM URL configuration
+
+---
+
+## Architecture
+
+```
+┌────────────────────────────────────────┐
+│             apps/web                    │
+│  Next.js — scene + encounter UI        │
+│  useGame() -> dispatch() -> Orchestrator│
+└──────────────┬─────────────────────────┘
+               | Commands / State reads
+┌──────────────v─────────────────────────┐
+│          packages/runtime               │
+│  Orchestrator.dispatch()               │
+│  The sole path for state mutation      │
+└──────────────┬─────────────────────────┘
+               | Event append / replay
+┌──────────────v─────────────────────────┐
+│          packages/engine                │
+│  applyEvent reducer (pure)             │
+│  getValidActions                       │
+│  domain: rng, oracle, invariants       │
+└──────────────┬─────────────────────────┘
+               |
+┌──────────────v─────────────────────────┐
+│  packages/persistence                   │  packages/knowledge-graph
+│  IEventStore / IStateStore             │  IWorldGraph
+│  Memory implementations (current)      │  MemoryWorldGraph (current)
+│  MongoDB stubs (not yet active)        │
+└──────────────┬─────────────────────────┘
+               |                          packages/vector-store
+               |                          INarrativeStore
+               |                          MemoryVectorStore (current)
+┌──────────────v─────────────────────────┐
+│          packages/context               │
+│  ContextModelService.build()           │
+│  Read-only — no writes                 │
+│  Assembles ContextModel from all stores│
+└──────────────┬─────────────────────────┘
+               | ContextModel -> toPrompt()
+┌──────────────v─────────────────────────┐
+│          packages/llm                   │
+│  NarrativeService.narrate()            │
+│  GPT4AllClient | StubLLMClient         │
+│  Generates narrative text only         │
+└────────────────────────────────────────┘
+```
+
+### Non-negotiable boundaries
+
+- The engine is the sole arbiter of legal actions. Nothing mutates game state except through `Orchestrator.dispatch()`.
+- The LLM generates narrative text only. It does not decide what happens. The engine decides; the LLM describes it.
+- `ContextModelService` is read-only. It never appends events, saves state, or writes to any store.
+- The web app dispatches commands and renders state. Zero game rules live in the UI.
+- `applyEvent` is a pure function. No async, no I/O, no `Date.now()`, no `Math.random()` — ever.
+
+---
+
+## Package Import Map
+
+| Import | Package | Notes |
+|---|---|---|
+| `@autarch/engine` | `packages/engine` | Types, reducer, replay, RNG, oracle, valid-actions, basic-ai |
+| `@autarch/runtime` | `packages/runtime` | `Orchestrator`, `Command` type |
+| `@autarch/persistence` | `packages/persistence` | `IEventStore`, `IStateStore`, `MemoryEventStore`, `MemoryStateStore` |
+| `@autarch/knowledge-graph` | `packages/knowledge-graph` | `IWorldGraph`, `MemoryWorldGraph` |
+| `@autarch/vector-store` | `packages/vector-store` | `INarrativeStore`, `MemoryVectorStore` |
+| `@autarch/context` | `packages/context` | `ContextModelService`, `toPrompt`, `ContextModel` |
+| `@autarch/llm` | `packages/llm` | `NarrativeService`, `GPT4AllClient`, `StubLLMClient` |
+
+After changing `packages/engine` source, rebuild before tests pick it up:
+```bash
+pnpm --filter @autarch/engine build
 ```
 
 ---
 
-## Planned Milestones
+## Known Problems in the Web App
 
-These are the next development phases in rough priority order. Do not implement a milestone unless explicitly asked. Document new milestones here when agreed.
+Fix these before building new features.
 
-### M4 — Fate Mechanics
+### 1. No game setup flow
 
-**Goal:** Implement the Fate RPG mechanical layer.
+When a new game is created, the player lands in `scene` mode with no character, no location, and no entities. The only actions available are oracle and end-scene, dispatching against a blank context.
 
-Fate uses:
-- **Aspects** — descriptive phrases on entities, scenes, zones. Can be invoked (spend Fate point for +2 or reroll) or compelled (accept a complication for a Fate point).
-- **Skills** — rated values used for rolls (e.g. Fight +3, Athletics +2)
-- **Stunts** — special rules exceptions tied to skills
-- **Stress tracks** — already stubbed in. Physical and Mental tracks typical.
-- **Consequences** — named aspects that absorb overflow stress (Mild/Moderate/Severe)
-- **Fate points** — resource for invocations. Add to `Entity.stats.resources`.
-- **Chaos factor** — the `chaos` field on runtime. Starts at 5. Increases when players "lose" scenes, decreases when they win. Used by the AI oracle (see M6).
-- **Dice** — Fate dice are 4dF (each die: -1, 0, +1). Rolls must use the seeded RNG on `GameEvent.rng`. Deterministic given the seed.
+There is no way through the UI to add a player character, add a starting location, or place the PC at it. This is why the game feels broken immediately after creating one.
 
-Implementation notes:
-- Dice rolls go on the event, not in the command. The orchestrator rolls when processing the command and embeds the result in the event payload.
-- Invoke/compel are new commands that must be validated against legal state (entity must have the aspect, must have fate points for invoke, etc.)
-- Consequences are aspects with a special tag. Treat as `EntityPatched` events.
+Fix: add a setup wizard or inline setup panel that activates when scene mode is active and no PC entity or scene location exists. Minimum required inputs: character name, starting location name. Optionally: aspects, skills. On confirm, dispatch `AddEntity`, `AddLocation`, `SetLocation` in sequence. Only show the normal scene actions once this is complete.
 
-### M5 — Scene Mode
+Note: `AddEntity` requires `phase === 'setup'`. The game starts in setup phase, so this is valid immediately. Do not advance the phase before setup is complete.
 
-**Goal:** Implement the non-combat scene exploration mode.
+### 2. The LLM narrates too broadly and too often
 
-Scene mode is the Divinity/BG exploration layer. The player moves between locations, triggers events, interacts with NPCs, and manages inventory/resources between encounters.
+`NarrativeService.narrate()` is called after every dispatch, rebuilding the full context prompt each time. The prompt covers everything — mode, chaos, player, location, NPCs, encounter, recent events, oracle — and asks the model to "narrate the current moment."
 
-- Location graph (nodes + connections) stored in the knowledge graph
-- Scene events: travel, rest, search, interact, trade
-- NPC interaction triggers narrative generation via the context model service
-- Scene outcomes feed the chaos factor
-- Transition from scene → encounter when combat triggers
+For a slow local model on CPU this means multiple seconds of wait per action. The model tends to regenerate a general scene description rather than reacting to what just happened, because the prompt gives it no focus.
 
-### M6 — AI Oracle (Fate-style)
+Fix: add a `triggerEvent` field to `BuildOptions` and surface it in `toPrompt()` as a focused directive at the bottom, replacing the generic "Narrate the current moment" with something like `NARRATE THIS EVENT: Kira travelled from Market Square to The Docks`. This dramatically reduces model wandering.
 
-**Goal:** Implement the solo RPG oracle that answers yes/no questions and generates random events.
+Additionally, only call `narrate()` for semantically meaningful events. Skip it for purely mechanical ones:
+- Call narrate for: `Travel`, `Interact`, `OracleAnswered`, `FateAttack`, `EntityDamaged`, `EncounterEnded`, `Rest`, `Search`, `SceneEnded`
+- Skip narrate for: `GameCreated`, `ModeSet`, `SetPhase`, `AddEntity`, `AddLocation`, `SetLocation`, `InitiativeSet`, `SetEncounterMap`
 
-In solo Fate, the oracle works roughly as:
-1. Player asks a yes/no question ("Is the guard suspicious?")
-2. Roll 2d6 + chaos factor vs a threshold
-3. Result: Yes, No, Yes-but, No-but, Yes-and, No-and
-4. Chaos factor modifies odds — higher chaos = more random/dramatic outcomes
+### 3. Oracle likelihood values are wrong
 
-The oracle is a rule in the engine (deterministic, seeded), not an LLM call. The LLM narrates the outcome. The engine decides it.
+`ActionPanel.tsx` defines `LIKELIHOOD_OPTIONS` with values `'certain'`, `'nearly-certain'`, `'likely'`, `'fifty-fifty'`, `'unlikely'`, `'nearly-impossible'`, `'impossible'`. These do not match `OracleLikelihood` in `packages/engine/src/domain/oracle.ts`, which is `'very-likely' | 'likely' | '50-50' | 'unlikely' | 'very-unlikely'`.
 
-Random event table is also chaos-driven — periodically the engine fires a `RandomEventTriggered` game event that the context model service must narrate.
+The command is currently cast with `as any`, so it dispatches without a type error. The orchestrator then silently fails to find the likelihood modifier and produces a broken adjusted value.
 
-### M7 — Persistent Storage Layer
+Fix: replace the `LIKELIHOOD_OPTIONS` array in `ActionPanel.tsx` with the five correct values. Remove the `as any` cast.
 
-**Goal:** Replace in-memory stores with real persistence.
+```typescript
+const LIKELIHOOD_OPTIONS = [
+  { value: 'very-likely',   label: 'Very Likely' },
+  { value: 'likely',        label: 'Likely' },
+  { value: '50-50',         label: '50/50' },
+  { value: 'unlikely',      label: 'Unlikely' },
+  { value: 'very-unlikely', label: 'Very Unlikely' },
+] as const
+```
 
-Three store types, each with a common interface that the engine already depends on:
+### 4. Oracle result is not shown in the UI
 
-**Document DB** — MongoDB or equivalent. Stores:
-- `GameState` snapshots (replacing in-memory `StateStore`)
-- `GameEvent` log (replacing in-memory `EventStore`)
-- World content: location definitions, item definitions, NPC templates
-- Inventories, character progression, quest state
+When `AskOracle` succeeds, the `OracleAnswered` event payload contains: the question, the oracle result (`yes`, `no-but`, etc.), the die values, the chaos modifier, and whether a random event fired. None of this is surfaced to the player — they only see what the LLM generates, which may not make the mechanical result clear.
 
-**Knowledge Graph** — Neo4j (server) or an in-process Cypher-compatible graph.
-- Node types: Location, NPC, Faction, Item, Concept
-- Relationship types: CONNECTED_TO, KNOWS, MEMBER_OF, HOSTILE_TO, HOLDS, etc.
-- Queried by the context model service to build relationship context
-- Updated by engine events (e.g. NPC killed → remove NPC node's ALIVE relationship)
+Fix: after an oracle dispatch, read the last `OracleAnswered` event from the event store and display the result as a distinct UI element — separate from LLM prose. Show at minimum: question, result label (e.g. "YES, BUT..."), and a random event indicator if triggered. This is the game decision the engine made. The narrative supplements it; it does not replace it.
 
-**Vector DB** — ChromaDB, Qdrant, or equivalent with a Node.js client.
-- Stores scene summaries, dialogue summaries, emotional beats as embeddings
-- Queried by context model service for narrative tone and continuity
-- New embeddings added after each scene concludes
+### 5. Narrative history is not preserved
 
-All three stores implement a common abstract interface. The engine itself only depends on `EventStore` and `StateStore`. The additional stores are consumed by the context model service.
+Each narration call replaces `session.narrative`. The player cannot see what happened earlier in the session.
 
-### M8 — Context Model Service
+Fix: change `session.narrative` from `string` to `NarrativeEntry[]` where:
+```typescript
+interface NarrativeEntry {
+  text: string
+  eventType: string
+  ts: string
+}
+```
+Append each new narration rather than replacing. Render as a scrollable list in `NarrativePanel`, newest at the bottom, auto-scrolling on new entries.
 
-**Goal:** Build the service that assembles prompts for the LLM.
+### 6. New game can be created while a game is active
 
-The context model is a structured object assembled from:
-1. Current `GameState` from the engine
-2. Active scene / location data from document DB
-3. Relevant NPC relationships from knowledge graph (within N hops of player)
-4. Recent narrative tone from vector DB (top-K semantic neighbours to current situation)
-5. Recent event log summary (last N events, human-readable)
+`createGame()` immediately overwrites the current session with no confirmation.
 
-The service outputs a `ContextModel` type that gets serialised to a prompt template. The LLM receives this and generates narrative text only — no game decisions, no state mutations.
+Fix: if a session exists, prompt the player to confirm before creating a new game.
 
-The context model service is a separate package (`packages/context` or a microservice). It has no write access to any store.
+---
 
-### M9 — LLM Integration
+## Test Structure
 
-**Goal:** Wire up GPT4All as the narrative generation layer.
+Tests are split between packages:
 
-- GPT4All exposes a local REST API (OpenAI-compatible endpoint)
-- The LLM client is a thin wrapper — takes a `ContextModel`, returns a narrative string
-- Model selection is configurable — the interface must not couple to GPT4All specifically
-- The narrative layer is entirely separate from the rules layer. It can be disabled and the engine still runs.
-- Response is narrative text only. No function calls, no structured output required from the LLM.
-- Keep prompts small. The context model does the heavy lifting so the model does not need to reason — it narrates.
+```
+packages/engine/tests/
+  m1-authority/         # replay-determinism, valid-actions
+  m2-combat/            # attack-move
+  m4-fate/              # chaos (reducer), rng
+  m5-scene/             # valid-actions (scene mode)
+  m6-oracle/            # oracle resolution
 
-### M10 — Web App (apps/web)
+packages/runtime/tests/
+  advance/              # advance, advance-initiative, encounter-ended
+  authority/            # invariant-violation
+  combat/               # ai, ai-guard, event-log, map-replay, end-to-end
+  end-to-end/
+  m4-fate/              # aspects, chaos (integration), consequences, fate-attack
+  m5-scene/             # scene (integration)
+  m6-oracle/            # oracle (integration)
+  smoke-tests/
+  helpers.ts            # makeEntity(), setupEncounter(), shared stores
 
-**Goal:** Build the primary player-facing UI in `apps/web`.
+packages/context/tests/context.test.ts
+packages/knowledge-graph/tests/memory.test.ts
+packages/vector-store/tests/memory.test.ts
+packages/llm/tests/narrative.test.ts
+packages/persistence/tests/memory.test.ts
+packages/persistence/tests/mongodb.test.ts   # requires running MongoDB
+```
 
-The UI has two main modes mirroring the engine:
+### Test conventions
 
-**Scene/Exploration view**
-- Location map — visualises the location graph
-- Player can navigate between connected locations
-- Sidebar: character sheet (stats, aspects, stress, fate points)
-- NPC list for current location
-- Action panel: interact, search, rest, travel
-- Narrative panel: LLM-generated scene text, scrollable history
-
-**Encounter/Combat view**
-- Zone map — renders `EncounterMap` zones with entity positions
-- Initiative tracker
-- Action panel: shows `getValidActions()` output for player character
-- Attack/Move executed by dispatching commands to the engine
-- AI turns happen automatically via `Advance`
-- Stress/defeat visualised per entity
-
-The web app dispatches Commands to the engine and reads `GameState`. It does not contain game logic. No rules live in the UI.
-
-Tech stack for `apps/web`:
-- Next.js (already scaffolded)
-- TypeScript
-- Tailwind CSS
-- shadcn/ui for components
-- No additional state management library — derive UI state from `GameState` directly
+- Vitest throughout
+- `describe` per feature, `it` per observable behaviour
+- Test names describe the outcome: `'AI moves closer when not in the same zone'`
+- Use helpers from `packages/runtime/tests/helpers.ts`: `makeEntity()`, `setupEncounter()`
+- Extend helpers when a pattern repeats across more than two tests
+- No wall-clock time in tests — fixed ISO strings for all timestamps
+- Replay determinism tests required for any mechanic that touches the reducer
+- Engine tests import from `@autarch/engine` (built dist) — rebuild after source changes
+- Runtime tests import from `@autarch/runtime` directly
 
 ---
 
 ## Coding Standards
 
-### Non-negotiable Rules
+### Non-negotiable
 
-1. **Tests first (or alongside).** No new mechanic ships without test coverage. Tests live in `packages/engine/tests/` under the relevant milestone folder (`m4-fate/`, `m5-scene/`, etc.).
+1. Tests first or alongside. No new mechanic ships without coverage.
+2. `applyEvent` is pure. No async, no I/O, no randomness, no `Date.now()`, no `Math.random()`.
+3. Commands produce events, events mutate state. Nothing else.
+4. All randomness is seeded and recorded in `GameEvent.rng`. The reducer reads stored rolls, never calls the RNG itself.
+5. Use `assert(condition, message)` from `domain/invariants.ts` for guard clauses. Not raw `Error`.
+6. TypeScript strict mode. No `any` without a comment. No `as any` to paper over type mismatches — fix the types.
+7. No logic in `apps/web`. The UI dispatches commands and renders state.
 
-2. **The reducer is a pure function.** `applyEvent(state, event)` must have no side effects. No async, no I/O, no randomness. It takes state and event, returns new state. Always.
+### Milestone discipline
 
-3. **Commands produce events, events mutate state.** The orchestrator validates commands and emits events. The reducer applies events. Nothing else mutates state.
+Do not implement a milestone unless explicitly asked. Adding types or interfaces for a future milestone is fine. Full implementation waits for explicit instruction.
 
-4. **All randomness is seeded and recorded.** Dice rolls happen in the orchestrator (or a dedicated RNG utility), the results are stored in `GameEvent.rng.rolls`, and the reducer uses those stored values. This guarantees deterministic replay.
-
-5. **`InvariantError` for illegal state.** Use `assert(condition, message)` from `domain/invariants.ts`. Do not throw raw `Error` for guard clauses.
-
-6. **TypeScript strict mode.** No `any` except where genuinely unavoidable and marked with a comment. No implicit any. No `as unknown as X` casts without justification.
-
-7. **No logic in the web app.** The UI dispatches commands and renders state. It contains zero game rules.
-
-### File Conventions
+### File locations
 
 ```
 packages/engine/src/
-  domain/       # Pure functions: reducer, replay, invariants
-  engine/       # Orchestrator, valid-actions, AI
-    ai/         # AI implementations
-  storage/      # Store interfaces and implementations
-  types/        # TypeScript types — no logic
+  domain/       # Pure functions: reducer, replay, invariants, rng, oracle
+  engine/       # valid-actions, state, ai/basic-ai
+  types/        # TypeScript types (game.ts, index.ts, actions.ts) — no logic
+  index.ts      # Re-exports everything
 
-packages/engine/tests/
-  m1-authority/
-  m2-combat/
-  m3-advance/
-  m4-fate/      # (planned)
-  m5-scene/     # (planned)
-  helpers.ts    # Shared test utilities
+packages/runtime/src/
+  orchestrator.ts   # Orchestrator class, Command type
+  index.ts
+
+packages/persistence/src/
+  interfaces.ts         # IEventStore, IStateStore
+  memory/               # MemoryEventStore, MemoryStateStore
+  mongodb/              # MongoEventStore, MongoStateStore (stubs)
+  index.ts
 ```
-
-### Test Conventions
-
-- Use Vitest
-- `describe` blocks per feature, `it` blocks per behaviour
-- Test names describe the observable outcome: `'AI moves closer when not in the same zone'`
-- Use `InMemoryEventStore` and `InMemoryStateStore` from `tests/helpers.ts`
-- Use `makeEntity()` and `setupEncounter()` helpers where applicable — extend helpers.ts when a new pattern repeats across tests
-- Tests must not depend on wall-clock time. All timestamps in tests use fixed ISO strings.
-- Replay determinism tests must exist for any mechanic that touches the reducer.
-
----
-
-## Technology Decisions
-
-| Concern | Decision | Notes |
-|---|---|---|
-| Monorepo | Turborepo + PNPM | Already set up |
-| Language | TypeScript strict | Engine is ESM (`"type": "module"`) |
-| Test runner | Vitest | Root-level `vitest.config.mts` |
-| UI framework | Next.js | `apps/web` — not yet built |
-| UI components | shadcn/ui + Tailwind | For `apps/web` |
-| Local LLM | GPT4All | Via local REST API (OpenAI-compatible) |
-| Knowledge graph | Neo4j (primary) | In-process Cypher graph acceptable for dev/test |
-| Document DB | TBD (MongoDB likely) | Must fit EventStore/StateStore interface |
-| Vector DB | TBD (ChromaDB or Qdrant) | Node.js client required |
-| RNG | Seeded deterministic | Implementation TBD — must produce reproducible sequences from a string seed |
-
----
-
-## What Not To Do
-
-- Do not add logic to `apps/web` or `apps/docs`. The docs app is boilerplate.
-- Do not break the `applyEvent` reducer's purity. No async, no I/O, no Date.now(), no Math.random().
-- Do not couple the engine to any specific database. The engine takes store interfaces, not concrete implementations.
-- Do not let the LLM make game decisions. The LLM narrates. The engine decides.
-- Do not bypass `Orchestrator.dispatch()` to mutate state directly.
-- Do not remove existing tests. Refactoring is fine; deletion is not.
-- Do not implement a milestone unless asked. Stubs and types are fine; full implementation waits for explicit instruction.
-- Do not use `Math.random()` anywhere. All randomness must use the seeded RNG.
 
 ---
 
 ## Running the Project
 
 ```bash
-# Install dependencies
+# Install
 pnpm install
 
 # Run all tests
 pnpm test:run
 
-# Run tests in watch mode
-pnpm test:watch
+# Run engine tests only
+pnpm --filter @autarch/engine test:run
 
-# Build the engine
+# Run runtime tests only
+pnpm --filter @autarch/runtime test:run
+
+# Build engine (required after source changes before runtime/web pick them up)
 pnpm --filter @autarch/engine build
 
+# Run the web app
+pnpm --filter web dev
+
 # Run a specific test file
-pnpm --filter @autarch/engine vitest run tests/m2-combat/m2.end-to-end.test.ts
+pnpm --filter @autarch/runtime vitest run tests/m4-fate/m4.aspects.test.ts
 ```
 
 ---
 
-## Current Test Suite Status
+## Planned Milestones
 
-All tests passing as of initial commit. Test files:
+Do not implement these unless explicitly asked.
 
-```
+### M11 — Real Persistence
 
- ✓ packages/runtime/tests/m4-fate/m4.aspects.test.ts (8 tests) 9ms
-   ✓ M4 InvokeAspect (5)
-     ✓ consumes a free invoke when one is available 4ms
-     ✓ spends a fate point when no free invokes remain 0ms
-     ✓ emits an AspectInvoked event with the correct payload 1ms
-     ✓ throws when no free invokes and no fate points 1ms
-     ✓ throws when the aspect does not exist on the entity 0ms
-   ✓ M4 CompelAspect (3)
-     ✓ grants a fate point to the entity 0ms
-     ✓ emits an AspectCompelled event 0ms
-     ✓ throws when the aspect does not exist on the entity 0ms
- ✓ packages/runtime/tests/m4-fate/m4.consequences.test.ts (4 tests) 10ms
-   ✓ M4 TakeConsequence (4)
-     ✓ adds a mild consequence aspect to the entity 6ms
-     ✓ adds moderate and severe consequences independently 2ms
-     ✓ emits an EntityPatched event 0ms
-     ✓ throws when the entity already has a consequence of the same severity 1ms
- ✓ packages/runtime/tests/combat/ai.guard.test.ts (2 tests) 11ms
-   ✓ M2 AI guards (2)
-     ✓ throws if runAiTurn called when it's not AI's turn 6ms
-     ✓ does not attack allies 3ms
- ✓ packages/runtime/tests/advance/advance.test.ts (3 tests) 12ms
-   ✓ M3 Advance (pure system driver) (3)
-     ✓ Advance starts a turn when no entity is active 6ms
-     ✓ Advance runs the AI turn when it is AI’s turn (same zone => attack) 3ms
-     ✓ Advance does nothing on player turn 3ms
- ✓ packages/runtime/tests/combat/ai.test.ts (2 tests) 13ms
-   ✓ M2 AI (zones) (2)
-     ✓ AI moves closer when not in the same zone 8ms
-     ✓ AI attacks when in the same zone 4ms
- ✓ packages/runtime/tests/m4-fate/m4.fate-attack.test.ts (6 tests) 17ms
-   ✓ M4 FateAttack (6)
-     ✓ emits RollMade event with correct fields 8ms
-     ✓ applies computed shifts as stress when shifts > 0 1ms
-     ✓ deals no stress on a miss (shifts <= 0) and still emits RollMade 2ms
-     ✓ replay is deterministic — replaying events yields the same state 3ms
-     ✓ rejects FateAttack when attacker is not the active entity 2ms
-     ✓ rejects FateAttack on an ally 1ms
- ✓ packages/runtime/tests/advance/encounter-ended.test.ts (3 tests) 15ms
-   ✓ M3 EncounterEnded (3)
-     ✓ emits win when all enemies are dead 11ms
-     ✓ emits loss when all pcs are dead 2ms
-     ✓ Advance is a no-op once in resolution 1ms
- ✓ packages/runtime/tests/m4-fate/m4.chaos.test.ts (3 tests) 15ms
-   ✓ M4 Chaos factor (integration) (3)
-     ✓ starts at 5 4ms
-     ✓ decreases by 1 on encounter win 6ms
-     ✓ increases by 1 on encounter loss 3ms
- ✓ packages/engine/tests/m4-fate/m4.rng.test.ts (8 tests) 9ms
-   ✓ M4 Fate RNG (8)
-     ✓ produces the same rolls for the same seed and seq 1ms
-     ✓ produces different rolls for different seeds 0ms
-     ✓ produces different rolls for different seq numbers 0ms
-     ✓ produces different rolls for different prefixes 0ms
-     ✓ all results are in {-1, 0, +1} 5ms
-     ✓ returns 4 dice by default with correct die names 1ms
-     ✓ sumRolls sums die results 0ms
-     ✓ produces a reasonably uniform distribution over many rolls 1ms
- ✓ packages/runtime/tests/advance/advance-iniative.test.ts (1 test) 7ms
-   ✓ M3 Advance (initiative) (1)
-     ✓ Advance in initiative moves phase to turn 6ms
- ✓ packages/runtime/tests/combat/event-log.test.ts (1 test) 7ms
-   ✓ M2 event semantics (1)
-     ✓ EndTurn emits TurnEnded and EncounterPointerSet but not ActiveEntitySet 6ms
- ✓ packages/runtime/tests/smoke-tests/smoke.test.ts (1 test) 9ms
-   ✓ Milestone 1 smoke flow (1)
-     ✓ creates game, adds entities, sets encounter mode, initiative, and advances turns 7ms
- ✓ packages/runtime/tests/combat/map-replay.test.ts (1 test) 6ms
-   ✓ M2 replay includes encounter map (1)
-     ✓ replay reconstructs map so Move actions exist 5ms
- ✓ packages/runtime/tests/authority/invariant-violation.test.ts (1 test) 5ms
-   ✓ invariant enforcement (1)
-     ✓ throws when ending a turn with no active entity 4ms
- ✓ packages/runtime/tests/end-to-end/end-to-end.test.ts (2 tests) 9ms
-   ✓ M2 e2e: Move + Attack (2)
-     ✓ Move updates the active entity position (adjacent zones only) 6ms
-     ✓ Attack increments stress and defeats when stress >= maxStress 1ms
- ✓ packages/engine/tests/m1-authority/replay-determinism.test.ts (1 test) 4ms
-   ✓ replay determinism (1)
-     ✓ replaying the same events twice yields identical state 3ms
- ✓ packages/engine/tests/m1-authority/valid-actions.test.ts (3 tests) 2ms
-   ✓ getValidActions (3)
-     ✓ does not include end-turn in setup phase 1ms
-     ✓ includes start-turn when in encounter mode, initiative set, and no active entity 0ms
-     ✓ includes end-turn and excludes start-turn when an entity is active 0ms
- ✓ packages/engine/tests/m2-combat/m2.attack-move.test.ts (3 tests) 2ms
-   ✓ M2 valid actions (zones) (3)
-     ✓ includes Move actions to all adjacent zones for the active entity 1ms
-     ✓ includes Attack only for opposing, alive targets in the same zone 0ms
-     ✓ does not include Move or Attack if the map or positions are missing 0ms
- ✓ packages/engine/tests/m4-fate/m4.chaos.test.ts (4 tests) 2ms
-   ✓ M4 Chaos factor (reducer) (4)
-     ✓ decreases by 1 on win 1ms
-     ✓ increases by 1 on loss 0ms
-     ✓ does not go below 1 on win 0ms
-     ✓ does not go above 9 on loss 0ms
-```
+Replace in-memory stores with durable backends.
+
+**MongoDB**: wire up `MongoEventStore` and `MongoStateStore`. Make them configurable via `MONGO_URI` environment variable. The `MemoryEventStore`/`MemoryStateStore` remain as the default when no URI is set.
+
+**Knowledge Graph**: a Neo4j implementation behind `IWorldGraph`. `MemoryWorldGraph` stays as the dev default.
+
+**Vector Store**: ChromaDB or Qdrant behind `INarrativeStore`. `MemoryVectorStore` stays as the dev default.
+
+All three implement existing interfaces. Engine and context service do not change.
+
+### M12 — Character Creation UI
+
+A proper in-game creation flow dispatching `AddEntity`, `AddLocation`, `SetLocation`.
+
+- Character name, high concept aspect, trouble aspect
+- Skill selection (Fate pyramid: one at +4, two at +3, three at +2, four at +1)
+- Starting location name and optional NPC
+- Must complete before normal scene actions are available
+
+### M13 — Encounter Setup UI
+
+A flow to configure and enter combat from scene mode.
+
+- Define zones and adjacency
+- Place enemies in zones
+- Set initiative order
+- Dispatches `SetEncounterMap`, `AddEntity`, `SetInitiative`, `SetMode`
+
+### M14 — Inventory and Items
+
+Items as typed objects. Inventory on Entity. Commands to pick up, drop, use, trade. Not yet scoped in detail.
+
+---
+
+## Technology Decisions
+
+| Concern | Decision |
+|---|---|
+| Monorepo | Turborepo + PNPM workspaces |
+| Language | TypeScript strict, ESM throughout |
+| Test runner | Vitest (per-package and root configs) |
+| UI framework | Next.js (`apps/web`) |
+| UI components | shadcn/ui (`packages/ui`) + Tailwind |
+| Design tokens | `packages/tailwind-config` — CSS custom properties |
+| Local LLM | OpenAI-compatible REST API (GPT4All, LM Studio, Ollama, llama.cpp) |
+| Knowledge graph | `MemoryWorldGraph` (now), Neo4j interface available |
+| Document DB | Memory stores (now), MongoDB stubs ready |
+| Vector DB | `MemoryVectorStore` (now), ChromaDB/Qdrant interface available |
+| RNG | FNV-1a + Mulberry32, seeded per event sequence number |
